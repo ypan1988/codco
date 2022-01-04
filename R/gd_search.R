@@ -127,11 +127,22 @@ grad_robust <- function(idx_in,
 
   }
 
+  #check if matrix is full rank
+  # algorithm should still work if not full rank due to factor covariates, 
+  # but obviously conflicts with the original model so should warn user
+  # and in some cases it won't
+  for(j in 1:length(X_list)){
+    r1 <- Matrix::rankMatrix(X_list[[j]][idx_in,])
+    r2 <- ncol(X_list[[j]])
+    if(r1[1]!=r2)warning("Solution does not have full rank! Removing uninformative columns and rows and re-running the function is advised.")
+  }
+  
+  
   #return variance
   if(trace){
     var_vals <- c()
     for(i in 1:length(X_list)){
-      var_vals[i] <- optim_fun(C_list[[i]],X_list[[i]][idx_in,],sig_list[[i]][idx_in,idx_in])
+      var_vals[i] <- tryCatch(optim_fun(C_list[[i]],X_list[[i]][sort(idx_in),],sig_list[[i]][sort(idx_in),sort(idx_in)]),error=function(i){NA})
     }
     cat("\nVariance for individual model(s):\n")
     print(var_vals)
@@ -140,10 +151,9 @@ grad_robust <- function(idx_in,
       print(sum(var_vals*c(w)))
     }
   }
-
-
-
-  return(idx_in)
+  
+  
+  return(X_id[sort(idx_in)])
 }
 
 optim_fun <- function(C,X,S){

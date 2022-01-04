@@ -153,7 +153,7 @@ grad_robust <- function(idx_in,
   }
   
   
-  return(X_id[sort(idx_in)])
+  return(idx_in)
 }
 
 optim_fun <- function(C,X,S){

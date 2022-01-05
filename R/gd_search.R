@@ -80,6 +80,17 @@ grad <- function(idx_in,A,sig,u,tol=1e-9, trace = TRUE){
   return(idx_in)
 }
 
+# check if psd using chol
+check_psd <- function(M){
+  cholM <- tryCatch(chol(M),error=function(e)NA)
+  if(!is(cholM,"matrix"))
+  {
+    return(FALSE)
+  } else {
+    return(TRUE)
+  }
+}
+
 #i've only changed this function, and added a couple of functions in gd_search.cpp
 grad_robust <- function(idx_in,
                         C_list,
@@ -179,36 +190,25 @@ grad_robust <- function(idx_in,
     A_list <- out[[3]]
     for(j in 1:length(sig_list))
     {
-      
-      #checking matrix rank is relatively expensive. our problem is mostly due to removing all observations
-      # from categorical variables, so within the loop we will just check if any of the columns have zero sum
-      # and then stop the function. I've also added an option to the function to remove columns, see above
-      if(any(colSums(X_list[[j]][out[[2]],])==0))
-        {
-        zero_col <- which(colSums(X_list[[j]][out[[2]],])==0)
-        if(all(X_list[[j]][out[[2]],zero_col]==0))
-          {
-          stop(paste0("non-full rank information matrix. column ",zero_col," is not part of design ",j))
-        }
-      }
-      
-      
       M_list[[j]] <- gen_m(X_list[[j]][out[[2]],],A_list[[j]])
       cM <- t(C_list[[j]]) %*% solve(M_list[[j]])
       u_list[[j]] <- cM %*% t(X_list[[j]])
+      
+      #check positive semi-definite before proceeding
+      if(!check_psd(M_list[[j]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[j]])==0),
+                                             " of design ",j," is not part of an optimal design."))
     }
-    
-   
     
     #calculate values for the new design - this is changed to new objective function
     new_val_vec <- matrix(sapply(1:length(A_list),function(j)c_obj_fun(M_list[[j]], C_list[[j]])),nrow=1)
     new_val <- as.numeric(new_val_vec %*% w)
     
+    diff <- new_val - val
     if (trace) {
       cat("\nIter: ",i)
       cat(" ",diff)
     }
-    diff <- new_val - val
+    
     # we are now looking for the smallest value rather than largest so diff<0
     if(diff<0){
       # A_list <- out[[3]]
@@ -216,7 +216,32 @@ grad_robust <- function(idx_in,
     }
 
   }
-
+  
+  # as a check, see if the next swap would mean that M is not positive semi-definite, in which
+  # case the algorithm has terminated early and the solution is not in this design
+  # this code is copied from the choose_swap_robust function, so could be streamlined into its own function perhaps
+  
+  idx_test <- out[[2]]
+  val_out_mat <- matrix(NA,nrow=length(idx_test),ncol=length(A_list))
+  for(idx in 1:length(A_list)){
+    val_out_mat[,idx] <- sapply(1:length(idx_test),function(i)
+      remove_one(A_list[[idx]],i-1,u_list[[idx]][idx_test]))
+  }
+  val_out <- as.numeric(val_out_mat %*% w)
+  idx_test <- idx_test[-which.max(val_out)]
+  rm1A <- list()
+  for(idx in 1:length(A_list)){
+    rm1A[[idx]] <- remove_one_mat(A_list[[idx]],which.max(val_out)-1)
+  }
+  for(j in 1:length(sig_list))
+  {
+    M_list[[j]] <- gen_m(X_list[[j]][idx_test,],rm1A[[j]])
+    
+    if(!check_psd(M_list[[j]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[j]])==0),
+                                           " of design ",j," is not part of an optimal design."))
+  }
+  
+  
   #check if matrix is full rank
   # algorithm should still work if not full rank due to factor covariates, 
   # but obviously conflicts with the original model so should warn user
@@ -227,6 +252,8 @@ grad_robust <- function(idx_in,
   #   r2 <- ncol(X_list[[j]])
   #   if(r1[1]!=r2)message("solution does not have full rank, check model before using design.")
   # }
+  
+ 
   
   ## if columns were removed then return the index to the indexing of the original X matrix
   if(!is.null(rm_cols))
@@ -248,8 +275,6 @@ grad_robust <- function(idx_in,
       print(sum(var_vals*c(w)))
     }
   }
-  
-  
   
   return(idx_in)
 }

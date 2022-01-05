@@ -14,6 +14,23 @@ double obj_fun(const arma::mat &A, const arma::vec &U2) {
 }
 
 // [[Rcpp::export]]
+double c_obj_fun(const arma::mat &M, const arma::vec &C) {
+  arma::mat M_inv = arma::inv_sympd(M);
+  return arma::as_scalar(C.t() * M_inv * C);
+}
+
+// [[Rcpp::export]]
+arma::mat gen_m(const arma::mat &X, const arma::mat &A) {
+  return X.t() * A * X;
+}
+
+// [[Rcpp::export]]
+arma::vec gen_u(const arma::mat &M, const arma::mat &X, const arma::vec &C) {
+  arma::mat M_inv = arma::inv_sympd(M);
+  return C.t() * M_inv * X.t();
+}
+
+// [[Rcpp::export]]
 double remove_one(const arma::mat &A, arma::uword i, const arma::vec &u) {
   arma::vec idx = arma::linspace(0, A.n_rows - 1, A.n_rows);
   arma::uvec uidx = arma::conv_to<arma::uvec>::from(idx);

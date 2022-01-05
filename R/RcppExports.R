@@ -5,6 +5,18 @@ obj_fun <- function(A, U2) {
     .Call(`_codco_obj_fun`, A, U2)
 }
 
+c_obj_fun <- function(M, C) {
+    .Call(`_codco_c_obj_fun`, M, C)
+}
+
+gen_m <- function(X, A) {
+    .Call(`_codco_gen_m`, X, A)
+}
+
+gen_u <- function(M, X, C) {
+    .Call(`_codco_gen_u`, M, X, C)
+}
+
 remove_one <- function(A, i, u) {
     .Call(`_codco_remove_one`, A, i, u)
 }

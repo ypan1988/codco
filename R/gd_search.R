@@ -80,12 +80,12 @@ grad <- function(idx_in,A,sig,u,tol=1e-9, trace = TRUE){
   return(idx_in)
 }
 
+#i've only changed this function, and added a couple of functions in gd_search.cpp
 grad_robust <- function(idx_in,
                         C_list,
                         X_list,
                         sig_list,
                         w=NULL,
-                        tol=1e-9,
                         trace = TRUE){
 
   if(is.null(w))w <- rep(1/length(sig_list),length(sig_list))
@@ -95,33 +95,63 @@ grad_robust <- function(idx_in,
   if(!all(unlist(lapply(sig_list,function(x)is(x,"matrix")))))stop("All sig_list must be matrices")
   if(!all(unlist(lapply(X_list,function(x)is(x,"matrix")))))stop("All X_list must be matrices")
   if((length(C_list)!=length(X_list))|length(X_list)!=length(sig_list))stop("Lists must be same length")
-
+  
+  # we need to calculate the M matrices for all the designs and store them
+  # M is calculated for idx_in design rather than full design
   A_list <- list()
   u_list <- list()
-  for(i in 1:length(sig_list)){
+  M_list <- list()
+  for(i in 1:length(sig_list))
+  {
     A_list[[i]] <- solve(sig_list[[i]][idx_in,idx_in])
-    M <- t(X_list[[i]]) %*% solve(sig_list[[i]]) %*% X_list[[i]]
-    cM <- t(C_list[[i]]) %*% solve(M)
+    M_list[[i]] <- gen_m(X_list[[i]][idx_in,],A_list[[i]])
+    cM <- t(C_list[[i]]) %*% solve(M_list[[i]])
+    # print(cM%*%C_list[[i]])
     u_list[[i]] <- cM %*% t(X_list[[i]])
   }
 
-  new_val_vec <- matrix(sapply(1:length(A_list),function(i)obj_fun(A_list[[i]], u_list[[i]][idx_in])),nrow=1)
-
+  # the objective function here is now c^T M^-1 c - i've implemented c_obj_func in gd_search.cpp
+  new_val_vec <- matrix(sapply(1:length(A_list),function(i)c_obj_fun(M_list[[i]], C_list[[i]])),nrow=1)
   new_val <- as.numeric(new_val_vec %*% w)
-  diff <- 1
+  
+  diff <- -1
   i <- 0
-  while(diff > tol){
+  # we now need diff to be negative
+  while(diff < 0)
+    {
+    #this code prints the M matrix if needed for debugging
+    # for(j in 1:length(X_list)){
+    #   M <- M_fun(C_list[[j]],X_list[[j]][sort(idx_in),],sig_list[[j]][sort(idx_in),sort(idx_in)])
+    #   print(solve(M))
+    #   print(cM%*%M%*%t(cM))
+    # }
+    
     val <- new_val
     i <- i + 1
     out <- choose_swap_robust(idx_in,A_list,sig_list,u_list, w)
-    new_val <- out[[1]]
+    # new_val <- out[[1]]
+    
+    #we have to now recalculate all the lists of matrices for the new design proposed by the swap
+    A_list <- out[[3]]
+    for(j in 1:length(sig_list))
+    {
+      M_list[[j]] <- gen_m(X_list[[j]][out[[2]],],A_list[[j]])
+      cM <- t(C_list[[j]]) %*% solve(M_list[[j]])
+      u_list[[j]] <- cM %*% t(X_list[[j]])
+    }
+    
+    #calculate values for the new design - this is changed to new objective function
+    new_val_vec <- matrix(sapply(1:length(A_list),function(j)c_obj_fun(M_list[[j]], C_list[[j]])),nrow=1)
+    new_val <- as.numeric(new_val_vec %*% w)
+    
     if (trace) {
       cat("\nIter: ",i)
       cat(" ",diff)
     }
     diff <- new_val - val
-    if(diff>0){
-      A_list <- out[[3]]
+    # we are now looking for the smallest value rather than largest so diff<0
+    if(diff<0){
+      # A_list <- out[[3]]
       idx_in <- out[[2]]
     }
 
@@ -131,17 +161,19 @@ grad_robust <- function(idx_in,
   # algorithm should still work if not full rank due to factor covariates, 
   # but obviously conflicts with the original model so should warn user
   # and in some cases it won't
-  for(j in 1:length(X_list)){
+  for(j in 1:length(X_list))
+  {
     r1 <- Matrix::rankMatrix(X_list[[j]][idx_in,])
     r2 <- ncol(X_list[[j]])
-    if(r1[1]!=r2)warning("Solution does not have full rank! Removing uninformative columns and rows and re-running the function is advised.")
+    if(r1[1]!=r2)message("solution does not have full rank, check model before using design.")
   }
   
   
   #return variance
   if(trace){
     var_vals <- c()
-    for(i in 1:length(X_list)){
+    for(i in 1:length(X_list))
+    {
       var_vals[i] <- tryCatch(optim_fun(C_list[[i]],X_list[[i]][sort(idx_in),],sig_list[[i]][sort(idx_in),sort(idx_in)]),error=function(i){NA})
     }
     cat("\nVariance for individual model(s):\n")
@@ -168,6 +200,11 @@ optim_fun2 <- function(C,X,S){
   M <- t(X) %*% solve(S) %*% X
   val <- diag(solve(M))[c(C) != 0]
   return(val)
+}
+
+M_fun <- function(C,X,S){
+  M <- t(X) %*% solve(S) %*% X
+  return(M)
 }
 
 

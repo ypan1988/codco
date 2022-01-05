@@ -6,11 +6,6 @@
 
 using namespace Rcpp;
 
-#ifdef RCPP_USE_GLOBAL_ROSTREAM
-Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
-Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
-#endif
-
 // obj_fun
 double obj_fun(const arma::mat& A, const arma::vec& U2);
 RcppExport SEXP _codco_obj_fun(SEXP ASEXP, SEXP U2SEXP) {
@@ -20,6 +15,43 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const arma::mat& >::type A(ASEXP);
     Rcpp::traits::input_parameter< const arma::vec& >::type U2(U2SEXP);
     rcpp_result_gen = Rcpp::wrap(obj_fun(A, U2));
+    return rcpp_result_gen;
+END_RCPP
+}
+// c_obj_fun
+double c_obj_fun(const arma::mat& M, const arma::vec& C);
+RcppExport SEXP _codco_c_obj_fun(SEXP MSEXP, SEXP CSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type M(MSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type C(CSEXP);
+    rcpp_result_gen = Rcpp::wrap(c_obj_fun(M, C));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gen_m
+arma::mat gen_m(const arma::mat& X, const arma::mat& A);
+RcppExport SEXP _codco_gen_m(SEXP XSEXP, SEXP ASEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type A(ASEXP);
+    rcpp_result_gen = Rcpp::wrap(gen_m(X, A));
+    return rcpp_result_gen;
+END_RCPP
+}
+// gen_u
+arma::vec gen_u(const arma::mat& M, const arma::mat& X, const arma::vec& C);
+RcppExport SEXP _codco_gen_u(SEXP MSEXP, SEXP XSEXP, SEXP CSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const arma::mat& >::type M(MSEXP);
+    Rcpp::traits::input_parameter< const arma::mat& >::type X(XSEXP);
+    Rcpp::traits::input_parameter< const arma::vec& >::type C(CSEXP);
+    rcpp_result_gen = Rcpp::wrap(gen_u(M, X, C));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -189,6 +221,9 @@ END_RCPP
 
 static const R_CallMethodDef CallEntries[] = {
     {"_codco_obj_fun", (DL_FUNC) &_codco_obj_fun, 2},
+    {"_codco_c_obj_fun", (DL_FUNC) &_codco_c_obj_fun, 2},
+    {"_codco_gen_m", (DL_FUNC) &_codco_gen_m, 2},
+    {"_codco_gen_u", (DL_FUNC) &_codco_gen_u, 3},
     {"_codco_remove_one", (DL_FUNC) &_codco_remove_one, 3},
     {"_codco_remove_one_mat", (DL_FUNC) &_codco_remove_one_mat, 2},
     {"_codco_add_one", (DL_FUNC) &_codco_add_one, 4},

@@ -191,12 +191,15 @@ grad_robust <- function(idx_in,
     for(j in 1:length(sig_list))
     {
       M_list[[j]] <- gen_m(X_list[[j]][out[[2]],],A_list[[j]])
+      
+      # check positive semi-definite before proceeding
+      if(!check_psd(M_list[[j]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[j]])==0),
+                                             " of design ",j," is not part of an optimal design."))
+      
       cM <- t(C_list[[j]]) %*% solve(M_list[[j]])
       u_list[[j]] <- cM %*% t(X_list[[j]])
       
-      #check positive semi-definite before proceeding
-      if(!check_psd(M_list[[j]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[j]])==0),
-                                             " of design ",j," is not part of an optimal design."))
+      
     }
     
     #calculate values for the new design - this is changed to new objective function

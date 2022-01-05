@@ -86,7 +86,8 @@ grad_robust <- function(idx_in,
                         X_list,
                         sig_list,
                         w=NULL,
-                        trace = TRUE){
+                        trace = TRUE,
+                        rm_cols = NULL){
 
   if(is.null(w))w <- rep(1/length(sig_list),length(sig_list))
   if(sum(w)!=1)w <- w/sum(w)
@@ -95,6 +96,49 @@ grad_robust <- function(idx_in,
   if(!all(unlist(lapply(sig_list,function(x)is(x,"matrix")))))stop("All sig_list must be matrices")
   if(!all(unlist(lapply(X_list,function(x)is(x,"matrix")))))stop("All X_list must be matrices")
   if((length(C_list)!=length(X_list))|length(X_list)!=length(sig_list))stop("Lists must be same length")
+  
+  # added this function to give the user the option to remove columns from particular
+  # designs quickly if the algorithm previously stopped and said to remove
+  if(!is.null(rm_cols))
+    {
+    if(!is(rm_cols,"list"))stop("rm_cols should be a list")
+    idx_original <- list()
+    zero_idx <- c()
+    idx_original <- 1:nrow(X_list[[1]])
+    
+    # find all the entries with non-zero values of the given columns in each design
+    for(i in 1:length(rm_cols))
+    {
+      if(!is.null(rm_cols[[i]])){
+        for(j in 1:length(rm_cols[[i]]))
+        {
+          zero_idx <- c(zero_idx,which(X_list[[i]][,rm_cols[[i]][j]]!=0))
+        }
+      }
+    }
+    zero_idx <- sort(unique(zero_idx))
+    idx_original <- idx_original[-zero_idx]
+    idx_in <- match(idx_in,idx_original)
+    
+    if(trace)message(paste0("removing ",length(zero_idx)," observations"))
+    
+    #update the matrices
+    for(i in 1:length(rm_cols))
+      {
+      X_list[[i]] <- X_list[[i]][-zero_idx,-rm_cols[[i]]]
+      C_list[[i]] <- matrix(C_list[[i]][-rm_cols[[i]]],ncol=1)
+      sig_list[[i]] <- sig_list[[i]][-zero_idx,-zero_idx]
+      
+    }
+    
+    if(any(is.na(idx_in)))
+    {
+      if(trace)message("generating new random starting point")
+      idx_in <- sample(1:nrow(X_list[[1]]),length(idx_in),replace=FALSE)
+    }
+  }
+  
+  #MAIN BODY OF THE FUNCTION
   
   # we need to calculate the M matrices for all the designs and store them
   # M is calculated for idx_in design rather than full design
@@ -109,7 +153,7 @@ grad_robust <- function(idx_in,
     # print(cM%*%C_list[[i]])
     u_list[[i]] <- cM %*% t(X_list[[i]])
   }
-
+  
   # the objective function here is now c^T M^-1 c - i've implemented c_obj_func in gd_search.cpp
   new_val_vec <- matrix(sapply(1:length(A_list),function(i)c_obj_fun(M_list[[i]], C_list[[i]])),nrow=1)
   new_val <- as.numeric(new_val_vec %*% w)
@@ -135,10 +179,26 @@ grad_robust <- function(idx_in,
     A_list <- out[[3]]
     for(j in 1:length(sig_list))
     {
+      
+      #checking matrix rank is relatively expensive. our problem is mostly due to removing all observations
+      # from categorical variables, so within the loop we will just check if any of the columns have zero sum
+      # and then stop the function. I've also added an option to the function to remove columns, see above
+      if(any(colSums(X_list[[j]][out[[2]],])==0))
+        {
+        zero_col <- which(colSums(X_list[[j]][out[[2]],])==0)
+        if(all(X_list[[j]][out[[2]],zero_col]==0))
+          {
+          stop(paste0("non-full rank information matrix. column ",zero_col," is not part of design ",j))
+        }
+      }
+      
+      
       M_list[[j]] <- gen_m(X_list[[j]][out[[2]],],A_list[[j]])
       cM <- t(C_list[[j]]) %*% solve(M_list[[j]])
       u_list[[j]] <- cM %*% t(X_list[[j]])
     }
+    
+   
     
     #calculate values for the new design - this is changed to new objective function
     new_val_vec <- matrix(sapply(1:length(A_list),function(j)c_obj_fun(M_list[[j]], C_list[[j]])),nrow=1)
@@ -161,20 +221,25 @@ grad_robust <- function(idx_in,
   # algorithm should still work if not full rank due to factor covariates, 
   # but obviously conflicts with the original model so should warn user
   # and in some cases it won't
-  for(j in 1:length(X_list))
-  {
-    r1 <- Matrix::rankMatrix(X_list[[j]][idx_in,])
-    r2 <- ncol(X_list[[j]])
-    if(r1[1]!=r2)message("solution does not have full rank, check model before using design.")
-  }
+  # for(j in 1:length(X_list))
+  # {
+  #   r1 <- Matrix::rankMatrix(X_list[[j]][idx_in,])
+  #   r2 <- ncol(X_list[[j]])
+  #   if(r1[1]!=r2)message("solution does not have full rank, check model before using design.")
+  # }
   
+  ## if columns were removed then return the index to the indexing of the original X matrix
+  if(!is.null(rm_cols))
+  {
+    idx_in <- idx_original[idx_in]
+  }
   
   #return variance
   if(trace){
     var_vals <- c()
     for(i in 1:length(X_list))
     {
-      var_vals[i] <- tryCatch(optim_fun(C_list[[i]],X_list[[i]][sort(idx_in),],sig_list[[i]][sort(idx_in),sort(idx_in)]),error=function(i){NA})
+      var_vals[i] <- new_val_vec[i] #tryCatch(c_obj_fun(C_list[[i]],X_list[[i]][sort(idx_in),],sig_list[[i]][sort(idx_in),sort(idx_in)]),error=function(i){NA})
     }
     cat("\nVariance for individual model(s):\n")
     print(var_vals)
@@ -183,6 +248,7 @@ grad_robust <- function(idx_in,
       print(sum(var_vals*c(w)))
     }
   }
+  
   
   
   return(idx_in)

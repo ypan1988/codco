@@ -45,8 +45,8 @@ ChooseSwapRobust <- function(nlist, idx_in, A_list, sig_list, u_list, weights, o
     .Call(`_codco_ChooseSwapRobust`, nlist, idx_in, A_list, sig_list, u_list, weights, out2, out3)
 }
 
-GradRobust <- function(nlist, idx_in, A_list, sig_list, u_list, weights, tol = 1e-9, trace = TRUE) {
-    .Call(`_codco_GradRobust`, nlist, idx_in, A_list, sig_list, u_list, weights, tol, trace)
+GradRobust <- function(nlist, idx_in, A_list, M_list, C_list, X_list, sig_list, u_list, weights, tol = 1e-9, trace = TRUE) {
+    .Call(`_codco_GradRobust`, nlist, idx_in, A_list, M_list, C_list, X_list, sig_list, u_list, weights, tol, trace)
 }
 
 rcpparma_hello_world <- function() {

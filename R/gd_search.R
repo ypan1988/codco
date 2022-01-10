@@ -19,7 +19,7 @@ choose_swap <- function(idx_in,A,sig,u){
   return(list(val,idx_in,newA))
 }
 
-choose_swap_robust <- function(idx_in,A_list,sig_list,u_list,weights,varval){
+choose_swap_robust <- function(idx_in,A_list,sig_list,u_list,weights){
   idx_out <- 1:nrow(sig_list[[1]])
   idx_out <- idx_out[!idx_out%in%idx_in]
   
@@ -185,14 +185,9 @@ grad_robust <- function(idx_in,
     # }
     
     val <- new_val
-    <<<<<<< HEAD
     i <- i + 1 
-    out <- choose_swap_robust(idx_in,A_list,sig_list,u_list, w,val)
-    =======
-      i <- i + 1
-    
     out <- choose_swap_robust(idx_in,A_list,sig_list,u_list, w)
-    >>>>>>> dd7f81ca3d74841cd0e5c32439c480675320dfd1
+   
     # new_val <- out[[1]]
     
     #we have to now recalculate all the lists of matrices for the new design proposed by the swap

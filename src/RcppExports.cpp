@@ -6,6 +6,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // obj_fun
 double obj_fun(const arma::mat& A, const arma::vec& U2);
 RcppExport SEXP _codco_obj_fun(SEXP ASEXP, SEXP U2SEXP) {
@@ -158,20 +163,23 @@ BEGIN_RCPP
 END_RCPP
 }
 // GradRobust
-arma::uvec GradRobust(arma::uword nlist, arma::uvec idx_in, arma::mat A_list, arma::mat sig_list, arma::vec u_list, arma::vec weights, double tol, bool trace);
-RcppExport SEXP _codco_GradRobust(SEXP nlistSEXP, SEXP idx_inSEXP, SEXP A_listSEXP, SEXP sig_listSEXP, SEXP u_listSEXP, SEXP weightsSEXP, SEXP tolSEXP, SEXP traceSEXP) {
+arma::uvec GradRobust(arma::uword nlist, arma::uvec idx_in, arma::mat A_list, arma::mat M_list, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec u_list, arma::vec weights, double tol, bool trace);
+RcppExport SEXP _codco_GradRobust(SEXP nlistSEXP, SEXP idx_inSEXP, SEXP A_listSEXP, SEXP M_listSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP u_listSEXP, SEXP weightsSEXP, SEXP tolSEXP, SEXP traceSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
     Rcpp::traits::input_parameter< arma::uword >::type nlist(nlistSEXP);
     Rcpp::traits::input_parameter< arma::uvec >::type idx_in(idx_inSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type A_list(A_listSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type M_list(M_listSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type C_list(C_listSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type X_list(X_listSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type sig_list(sig_listSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type u_list(u_listSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
     Rcpp::traits::input_parameter< double >::type tol(tolSEXP);
     Rcpp::traits::input_parameter< bool >::type trace(traceSEXP);
-    rcpp_result_gen = Rcpp::wrap(GradRobust(nlist, idx_in, A_list, sig_list, u_list, weights, tol, trace));
+    rcpp_result_gen = Rcpp::wrap(GradRobust(nlist, idx_in, A_list, M_list, C_list, X_list, sig_list, u_list, weights, tol, trace));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -231,7 +239,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_codco_ChooseSwap", (DL_FUNC) &_codco_ChooseSwap, 6},
     {"_codco_Grad", (DL_FUNC) &_codco_Grad, 6},
     {"_codco_ChooseSwapRobust", (DL_FUNC) &_codco_ChooseSwapRobust, 8},
-    {"_codco_GradRobust", (DL_FUNC) &_codco_GradRobust, 8},
+    {"_codco_GradRobust", (DL_FUNC) &_codco_GradRobust, 11},
     {"_codco_rcpparma_hello_world", (DL_FUNC) &_codco_rcpparma_hello_world, 0},
     {"_codco_rcpparma_outerproduct", (DL_FUNC) &_codco_rcpparma_outerproduct, 1},
     {"_codco_rcpparma_innerproduct", (DL_FUNC) &_codco_rcpparma_innerproduct, 1},

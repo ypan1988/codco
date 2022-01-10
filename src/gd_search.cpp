@@ -263,36 +263,68 @@ double ChooseSwapRobust(arma::uword nlist, arma::uvec idx_in, const arma::mat &A
 
 // [[Rcpp::export]]
 arma::uvec GradRobust(arma::uword nlist, arma::uvec idx_in, arma::mat A_list,
+                      arma::mat M_list, arma::vec C_list, arma::mat X_list,
                       arma::mat sig_list, arma::vec u_list, arma::vec weights,
                       double tol = 1e-9, bool trace = true) {
   const arma::uword u_nrows = u_list.n_rows / nlist;
   const arma::uword A_nrows = A_list.n_rows / nlist;
+  const arma::uword M_nrows = M_list.n_rows / nlist;
+  const arma::uword C_nrows = C_list.n_rows / nlist;
+  const arma::uword X_nrows = X_list.n_rows / nlist;
 
   arma::vec new_val_vec(nlist, arma::fill::zeros);
   for (arma::uword j = 0; j < nlist; ++j) {
-    arma::mat A = A_list.rows(j*A_nrows, (j+1)*A_nrows-1);
-    arma::vec u = u_list.subvec(j*u_nrows, (j+1)*u_nrows-1);
-    new_val_vec(j) = obj_fun(A, u.elem(idx_in));
+    arma::mat M = M_list.rows(j*M_nrows, (j+1)*M_nrows-1);
+    arma::vec C = C_list.subvec(j*C_nrows, (j+1)*C_nrows-1);
+    new_val_vec(j) = c_obj_fun(M, C);
   }
   double new_val = arma::dot(new_val_vec, weights);
 
-  double diff = 1.0;
+  double diff = -1.0;
   int i = 0;
-  while (diff > tol) {
+  // we now need diff to be negative
+  while (diff < 0) {
     double val = new_val;
     i = i + 1;
 
     arma::uvec out2;
     arma::mat out3;
+
     new_val = ChooseSwapRobust(nlist, idx_in, A_list, sig_list, u_list, weights,
                                out2, out3);
 
+    //we have to now recalculate all the lists of matrices for the new design proposed by the swap
+    A_list = out3;
+    for (arma::uword j = 0; j < nlist; ++j) {
+      arma::mat X = X_list.rows(j*X_nrows, (j+1)*X_nrows-1);
+      arma::mat A = A_list.rows(j*A_nrows, (j+1)*A_nrows-1);
+      M_list.rows(j*M_nrows, (j+1)*M_nrows-1) = gen_m(X.rows(out2),A);
+
+      //check positive semi-definite before proceeding
+      // if(!check_psd(M_list[[j]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[j]])==0),
+      //               " of design ",j," is not part of an optimal design."))
+
+      arma::mat C = C_list.rows(j*C_nrows, (j+1)*C_nrows-1);
+      arma::mat M = M_list.rows(j*M_nrows, (j+1)*M_nrows-1);
+      arma::mat cM = C.t() * M.i();
+      u_list.rows(j*u_nrows, (j+1)*u_nrows-1) = X * cM.t();
+    }
+
+    // calculate values for the new design - this is changed to new objective function
+    for (arma::uword j = 0; j < nlist; ++j) {
+      arma::mat M = M_list.rows(j*M_nrows, (j+1)*M_nrows-1);
+      arma::vec C = C_list.subvec(j*C_nrows, (j+1)*C_nrows-1);
+      new_val_vec(j) = c_obj_fun(M, C);
+    }
+    new_val = arma::dot(new_val_vec, weights);
+
     diff = new_val - val;
-    if (diff > 0) {
-      A_list = out3;
+    // we are now looking for the smallest value rather than largest so diff<0
+    if (diff < 0) {
+      // A_list = out3;
       idx_in = out2;
     }
-    if (trace) Rcpp::Rcout << "\rIter: " << i << " " << diff << std::endl;
+    if (trace) Rcpp::Rcout << "\rIter " << i << ": " << diff << std::endl;
   }
   return (idx_in);
 }

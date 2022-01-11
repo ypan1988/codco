@@ -300,6 +300,7 @@ grad_robust_step <- function(idx_in,
   
   #define sample size
   n <- length(idx_in)
+  N <- nrow(X_list[[1]])
   
   # added this function to give the user the option to remove columns from particular
   # designs quickly if the algorithm previously stopped and said to remove
@@ -381,6 +382,7 @@ grad_robust_step <- function(idx_in,
     val <- new_val
     i <- i + 1 
     
+    best_val_vec <- new_val_vec
     #2. make swap at top of list
     
     #grad <- c()
@@ -394,18 +396,18 @@ grad_robust_step <- function(idx_in,
       # check positive semi-definite before proceeding
       if(!check_psd(M_list[[idx]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[idx]])==0),
                                                " of design ",idx," is not part of an optimal design."))
+      
     }
     
     #calculate values for the new design - this is changed to new objective function
     new_val_vec <- matrix(sapply(1:length(A_list),function(j)c_obj_fun(M_list[[j]], C_list[[j]])),nrow=1)
     new_val <- as.numeric(new_val_vec %*% w)
-    #print(c(idx_in[1],idx_out[1],val,new_val))
     
     diff <- new_val - val
     
     if (trace) {
       cat("\nIter: ",i)
-      cat(" ",diff)
+      cat(" ",val)
     }
     
     if(diff<0){
@@ -418,7 +420,7 @@ grad_robust_step <- function(idx_in,
         u_list[[idx]] <- (t(C_list[[idx]]) %*% solve(M_list[[idx]])) %*% t(X_list[[idx]])
       }
     } else {
-      #cat("\nReordering")
+      #if no easy swaps can be made, reorder the list and try the top one again
       i <- i + 1 
       idx_list <- reorder_obs(idx_in,
                               A_list,
@@ -454,7 +456,7 @@ grad_robust_step <- function(idx_in,
       # we are now looking for the smallest value rather than largest so diff<0
       if (trace) {
         cat("\nIter (reorder): ",i)
-        cat(" ",diff)
+        cat(" ",val)
       }
       
       if(diff<0){
@@ -466,6 +468,71 @@ grad_robust_step <- function(idx_in,
         {
           u_list[[idx]] <- (t(C_list[[idx]]) %*% solve(M_list[[idx]])) %*% t(X_list[[idx]])
         }
+      } else {
+        # if reordering doesn't find a better solution then check all the neighbours
+        #check optimality and see if there are any neighbours that improve the solution
+        # I have got it to go through in order of the ordered observations, and then break the loop if
+        # it reaches one with a positive gradient because we know the ones after that will be worse
+        
+        if(trace)cat("\nChecking optimality...\n")
+        psd_check <- c()
+        val_in_mat <- c()
+        for(obs in 1:n)
+        {
+          if(trace)cat(paste0("\rChecking neighbour block: ",obs," of ",n))
+          rm1A <- list()
+          for(idx in 1:length(A_list))
+          {
+            rm1A[[idx]] <- remove_one_mat(A_list[[idx]],obs-1)
+          }
+          for(obs_j in 1:(N-n))
+          {
+            for(idx in 1:length(A_list))
+            {
+              val_in_mat[idx] <- add_one(rm1A[[idx]],
+                                     sig_list[[idx]][idx_out[obs_j],idx_out[obs_j]],
+                                     sig_list[[idx]][idx_in[-obs],idx_out[obs_j]],
+                                     u_list[[idx]][c(idx_in[-obs],idx_out[obs_j])])
+            }
+            val_in <- sum(val_in_mat*w)
+            if(val - val_in < 0){
+              for(idx in 1:length(A_list))
+              {
+                A_list_sub[[idx]] <- add_one_mat(rm1A[[idx]],
+                                                 sig_list[[idx]][idx_out[obs_j],idx_out[obs_j]],
+                                                 sig_list[[idx]][idx_in[-obs],idx_out[obs_j]])
+                
+                M_list[[idx]] <- gen_m(X_list[[idx]][c(idx_in[-obs],idx_out[obs_j]),],A_list_sub[[idx]])
+                psd_check[idx] <- check_psd(M_list[[idx]])
+              }
+              
+              if(any(!psd_check))next
+              new_val_vec <- matrix(sapply(1:length(A_list),function(k)c_obj_fun(M_list[[k]], C_list[[k]])),nrow=1)
+              new_val <- as.numeric(new_val_vec %*% w)
+              if(new_val - val < 0 )
+              {
+                diff <- new_val - val
+                if(trace)cat("\nImprovement found: ",new_val)
+                swap_idx <- idx_in[obs]
+                idx_in <- c(idx_in[-obs],idx_out[obs_j])
+                idx_out <- c(idx_out[-obs_j],swap_idx)
+                A_list <- A_list_sub
+                for(idx in 1:length(A_list))
+                {
+                  u_list[[idx]] <- (t(C_list[[idx]]) %*% solve(M_list[[idx]])) %*% t(X_list[[idx]])
+                }
+                break
+              }
+            } else {
+              break
+            }
+          }
+          if(diff < 0)break
+        }
+        
+          
+        
+
       }
       
     }
@@ -505,16 +572,11 @@ grad_robust_step <- function(idx_in,
   
   #return variance
   if(trace){
-    var_vals <- c()
-    for(i in 1:length(X_list))
-    {
-      var_vals[i] <- new_val_vec[i] #tryCatch(c_obj_fun(C_list[[i]],X_list[[i]][sort(idx_in),],sig_list[[i]][sort(idx_in),sort(idx_in)]),error=function(i){NA})
-    }
     cat("\nVariance for individual model(s):\n")
-    print(var_vals)
+    print(c(best_val_vec))
     if(length(A_list)>1){
       cat("\n Weighted average variance:\n")
-      print(sum(var_vals*c(w)))
+      print(sum(best_val_vec*c(w)))
     }
   }
   

@@ -211,16 +211,16 @@ gen_cov_mat <- function(Xb,
   
   if(f[1]=="binomial"){
     if(f[2]=="logit"){
-      W <- diag(1/(logit(Xb)*(1-logit(Xb))*length(Xb)))
+      W <- diag(1/(logit(Xb)*(1-logit(Xb))))
     }
     if(f[2]=="log"){
-      W <- diag((1-logit(Xb))/(logit(Xb)*length(Xb)))
+      W <- diag((1-logit(Xb))/(logit(Xb)))
     }
     if(f[2]=="identity"){
-      W <- diag((logit(Xb)*(1-logit(Xb)))/length(Xb))
+      W <- diag((logit(Xb)*(1-logit(Xb))))
     }
     if(f[2]=="probit"){
-      W <- diag((pnorm(Xb)*(1-pnorm(Xb)))/(dnorm(Xb)*length(Xb)))
+      W <- diag((pnorm(Xb)*(1-pnorm(Xb)))/(dnorm(Xb)))
     }
   }
   

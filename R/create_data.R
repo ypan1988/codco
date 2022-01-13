@@ -264,12 +264,14 @@ gen_cov_mat <- function(Xb,
 # list(list("exponential",pars=c(1,2)),list("indicator",pars=c(1,2)))
 gen_re_mat <- function(df,
                        dims,
+                       groups,
                        funs,
                        verbose=TRUE,
                        parallel=FALSE){
   if(!is(dims,"list"))stop("dims should be list") 
   if(!is(funs,"list"))stop("funs should be list") 
   if(length(dims)!=length(funs))stop("dims and funs should be same length")
+  if(length(groups)!=length(dims))stop("groups and dims should have same length")
   
   if(nrow(df)>500&verbose)message(paste0("Creating large covariance matrix ",nrow(df)," x ",nrow(df)," this may take several minutes."))
   
@@ -308,12 +310,21 @@ gen_re_mat <- function(df,
     }
   }
   
-  D <- matrix(1, nrow=zdim2,ncol=zdim2)  
+  #D <- matrix(1, nrow=zdim2,ncol=zdim2)  
   
   if(verbose)cat("Applying covariance functions...\n")
-  for(i in 1:nD){
-    D <- D*do.call(funs[[i]][[1]],list(Dlist[[i]],funs[[i]][[2]]))
+  D.sublist <- list()
+  igroups <- unique(groups)
+  ngroups <- length(igroups)
+  for(d in 1:ngroups){
+    D.sublist[[d]] <- matrix(1, nrow=zdim2,ncol=zdim2)  
   }
+  
+  for(i in 1:nD){
+    D.sublist[[groups[i]]] <- D.sublist[[groups[i]]]*do.call(funs[[i]][[1]],list(Dlist[[i]],funs[[i]][[2]]))
+  }
+  
+  D <- Reduce("+",D.sublist)
   
   return(list(Z,D))
   

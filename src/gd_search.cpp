@@ -328,3 +328,351 @@ arma::uvec GradRobust(arma::uword nlist, arma::uvec idx_in, arma::mat A_list,
   }
   return (idx_in);
 }
+
+// [[Rcpp::export]]
+arma::uvec uvec_minus(const arma::uvec &v, arma::uword rm_idx) {
+  arma::uvec res(v.size()-1);
+  for (arma::uword i = 0, j = 0; i < v.size(); ++i) {
+    if (i != rm_idx) res(j++) = v(i);
+  }
+  return res;
+}
+
+class HillClimbing {
+private:
+  const arma::vec C_list_;
+  const arma::mat X_list_;
+  const arma::mat sig_list_;
+  const arma::vec weights_;
+  const arma::uword nlist_;
+
+  const arma::uword C_nrows_;
+  const arma::uword X_nrows_;
+  const arma::uword sig_nrows_;
+
+  const arma::uword n_;
+  const arma::uword N_;
+
+public:
+  arma::uvec idx_in_;
+  arma::uvec idx_out_;
+  arma::vec new_val_vec_;
+  arma::vec best_val_vec_;
+
+  arma::mat A_list_;
+  arma::mat A_list_sub_;
+  arma::mat rm1A_list_;
+
+  arma::mat M_list_;
+  arma::vec u_list_;
+
+  const arma::uword A_nrows_;
+  const arma::uword rm1A_nrows_;
+
+  const arma::uword M_nrows_;
+  const arma::uword u_nrows_;
+
+  bool trace_;
+
+public:
+  HillClimbing(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, bool trace=false) :
+  C_list_(C_list), X_list_(X_list), sig_list_(sig_list), weights_(weights), nlist_(weights_.n_elem),
+  C_nrows_(C_list.n_rows / nlist_), X_nrows_(X_list.n_rows / nlist_), sig_nrows_(sig_list.n_rows / nlist_),
+  n_(idx_in.n_elem), N_(sig_nrows_), idx_in_(idx_in), idx_out_(N_ - n_, arma::fill::zeros),
+  new_val_vec_(nlist_, arma::fill::zeros), best_val_vec_(nlist_, arma::fill::zeros),
+  A_list_(n_ * nlist_, n_, arma::fill::zeros), A_list_sub_(n_ * nlist_, n_, arma::fill::zeros),
+  rm1A_list_((n_-1) * nlist_, n_-1, arma::fill::zeros),
+  M_list_(C_nrows_ * nlist_, C_nrows_, arma::fill::zeros),
+  u_list_(X_nrows_ * nlist_, arma::fill::zeros),
+  A_nrows_(n_), rm1A_nrows_(n_-1), M_nrows_(C_nrows_), u_nrows_(X_nrows_), trace_(trace) {
+    Update_A_list();
+    Update_M_list();
+    Update_u_list();
+  }
+
+  arma::vec get_C(arma::uword i) const {
+    return C_list_.subvec(i * C_nrows_, (i + 1) * C_nrows_ - 1);
+  }
+  arma::mat get_X(arma::uword i) const {
+    return X_list_.rows(i * X_nrows_, (i + 1) * X_nrows_ - 1);
+  }
+  arma::mat get_sig(arma::uword i) const {
+    return sig_list_.rows(i * sig_nrows_, (i + 1) * sig_nrows_ - 1);
+  }
+  arma::mat get_A(arma::uword i) const {
+    return A_list_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1);
+  }
+  arma::mat get_rm1A(arma::uword i) const {
+    return rm1A_list_.rows(i * rm1A_nrows_, (i + 1) * rm1A_nrows_ - 1);
+  }
+  arma::mat get_M(arma::uword i) const {
+    return M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1);
+  }
+  arma::vec get_u(arma::uword i) const {
+    return u_list_.subvec(i * u_nrows_, (i + 1) * u_nrows_ - 1);
+  }
+
+  arma::uvec join_idx(arma::uvec idx, arma::uword elem) {
+    return arma::join_cols(idx, arma::uvec({elem}));
+  }
+
+  double comp_c_obj_fun() {
+//    arma::vec new_val_vec(nlist_, arma::fill::zeros);
+    for (arma::uword j = 0; j < nlist_; ++j) {
+      arma::mat M = get_M(j);
+      arma::vec C = get_C(j);
+      new_val_vec_(j) = c_obj_fun(M, C);
+    }
+    return arma::dot(new_val_vec_, weights_);
+  }
+  void grad_robust_step() {
+    double new_val = comp_c_obj_fun();
+    Rcpp::Rcout << "DEBUGnew_val = " << new_val << std::endl;
+
+    reorder_obs();
+
+    double diff = -1.0;
+    int i = 0;
+    // we now need diff to be negative
+    while (diff < 0) {
+      double val = new_val;
+      i = i + 1;
+      best_val_vec_ = new_val_vec_;
+
+      Update_M_list2();
+      new_val = comp_c_obj_fun();
+      diff = new_val - val;
+
+      if (trace_) Rcpp::Rcout << "\nIter " << i << ": " << val << std::endl;
+
+      if (diff < 0) {
+        arma::uword swap_idx = idx_in_(0);
+        idx_in_ = join_idx(idx_in_.rows(1, n_-1), idx_out_(0));
+        idx_out_ = join_idx(idx_out_.rows(1, n_-1), swap_idx);
+        // idx_in_ = arma::join_cols(idx_in_.rows(1, n_-1), arma::uvec({idx_out_(0)}));
+        // idx_out_ = arma::join_cols(idx_out_.rows(1, n_-1), arma::uvec({swap_idx}));
+        A_list_ = A_list_sub_;
+        Update_u_list();
+      } else {
+        // if no easy swaps can be made, reorder the list and try the top one again
+        ++i;
+
+        reorder_obs();
+        Update_M_list2();
+        new_val = comp_c_obj_fun();
+        diff = new_val - val;
+
+        // we are now looking for the smallest value rather than largest so diff<0
+        if (trace_) Rcpp::Rcout << "\nIter (reorder)" << i << ": " << val << std::endl;
+
+        if (diff < 0) {
+          arma::uword swap_idx = idx_in_(0);
+          idx_in_ = arma::join_cols(idx_in_.rows(1, n_-1), arma::uvec({idx_out_(0)}));
+          idx_out_ = arma::join_cols(idx_out_.rows(1, n_-1), arma::uvec({swap_idx}));
+          A_list_ = A_list_sub_;
+          Update_u_list();
+        } else {
+          // if reordering doesn't find a better solution then check all the neighbours
+          // check optimality and see if there are any neighbours that improve the solution
+          // I have got it to go through in order of the ordered observations, and then break the loop if
+          // it reaches one with a positive gradient because we know the ones after that will be worse
+
+          if (trace_) Rcpp::Rcout << "\nChecking optimality..." << std::endl;
+          for (arma::uword obs = 0; obs < n_; ++obs)  {
+            if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
+            Update_rm1A_list(obs);
+            for (arma::uword obs_j = 0; obs_j < N_ - n_; ++obs_j) {
+              arma::vec val_in_mat(nlist_, arma::fill::zeros);
+              for (arma::uword idx = 0; idx < nlist_; ++idx) {
+                arma::vec u = get_u(idx);
+                arma::mat sig = get_sig(idx);
+                arma::mat rm1A = get_rm1A(idx);
+                //arma::mat rm1A = rm1A_list.rows(idx * (A_nrows_-1), (idx + 1) * (A_nrows_-1) - 1);
+                arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
+                arma::uword ii = idx_out_(obs_j);
+                val_in_mat(idx) = add_one(rm1A,sig(ii,ii),
+                           sig.submat(inx_in_no_obs, arma::uvec({ii})),
+                           u.elem(arma::join_cols(inx_in_no_obs, arma::uvec({ii}))));
+              } // for loop
+
+              double val_in = arma::sum(val_in_mat * weights_);
+
+              if (val - val_in < 0) {
+                //bool flag = Update_M_list3(obs, obs_j, rm1A_list);
+                bool flag = Update_M_list3(obs, obs_j);
+                if (!flag) continue;
+                new_val = comp_c_obj_fun();
+
+                if (new_val - val < 0) {
+                  diff = new_val - val;
+                  if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val;
+                  arma::uword swap_idx = idx_in_(obs);
+                  idx_in_ = arma::join_cols(uvec_minus(idx_in_, obs), arma::uvec({idx_out_(obs_j)}));
+                  idx_out_ = arma::join_cols(uvec_minus(idx_out_, obs_j), arma::uvec({swap_idx}));
+                  A_list_ = A_list_sub_;
+                  Update_u_list();
+                  break;
+                } // if (new_val - val < 0)
+              } else break; // if (val - val_in < 0)
+            } // for loop obs_j
+
+            if (diff < 0) break;
+          } // for loop obs
+        }// else
+      }
+    } // while loop
+  }
+
+private:
+  void Update_A_list() {
+    for (arma::uword i = 0; i < nlist_; ++i) {
+      arma::mat sig = get_sig(i);
+      arma::mat tmp = sig.submat(idx_in_, idx_in_);
+      A_list_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1) = tmp.i();
+    }
+  }
+
+  void Update_rm1A_list(arma::uword obs) {
+    for (arma::uword idx = 0; idx < nlist_; ++idx) {
+      arma::mat A = get_A(idx);
+      arma::mat rm1A = remove_one_mat(A, obs);
+      rm1A_list_.rows(idx * rm1A_nrows_, (idx + 1) * rm1A_nrows_ - 1) = rm1A;
+    }
+  }
+
+  void Update_M_list() {
+    for (arma::uword i = 0; i < nlist_; ++i) {
+      arma::mat X = get_X(i).rows(idx_in_);
+      arma::mat A = get_A(i);
+      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = X.t() * A * X;
+    }
+  }
+
+  void Update_M_list2() {
+    for (arma::uword i = 0; i < nlist_; ++i) {
+      arma::mat sig = get_sig(i);
+
+      // compute the new A without the index of idx_rm
+      arma::mat A = get_A(i);
+      arma::mat rm1A = remove_one_mat(A, 0);
+      arma::mat A_tmp = add_one_mat(rm1A, sig(idx_out_(0), idx_out_(0)),
+                                    sig.submat(idx_in_.tail(n_-1), arma::uvec({idx_out_(0)})));
+
+      A_list_sub_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1) = A_tmp;
+      arma::mat X = get_X(i).rows(arma::join_cols(idx_in_.tail(n_-1), arma::uvec({idx_out_(0)})));
+
+      arma::mat M = X.t() * A_tmp * X;
+      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = M;
+      if (!M.is_sympd()) {
+        Rcpp::stop("M not positive semi-definite.");
+      }
+    }
+  }
+
+  bool Update_M_list3(arma::uword obs, arma::uword obs_j) {
+    bool flag = true;
+    for (arma::uword idx = 0; idx < nlist_; ++idx) {
+      arma::vec u = get_u(idx);
+      arma::mat sig = get_sig(idx);
+      arma::mat rm1A = get_rm1A(idx);
+
+      arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
+      arma::uword ii = idx_out_(obs_j);
+
+      arma::mat A_tmp = add_one_mat(rm1A, sig(ii, ii),
+                                    sig.submat(inx_in_no_obs, arma::uvec({ii})));
+      A_list_sub_.rows(idx * A_nrows_, (idx + 1) * A_nrows_ - 1) = A_tmp;
+      arma::mat X = get_X(idx).rows(arma::join_cols(inx_in_no_obs, arma::uvec({ii})));
+      arma::mat M = X.t() * A_tmp * X;
+      M_list_.rows(idx * M_nrows_, (idx + 1) * M_nrows_ - 1) = M;
+      if (!M.is_sympd()) flag = false;
+    }
+    return flag;
+  }
+
+  void Update_u_list() {
+    for (arma::uword i = 0; i < nlist_; ++i) {
+      arma::mat X = get_X(i);
+      arma::vec C = get_C(i);
+      arma::mat M = get_M(i);
+      arma::mat M_inv = arma::inv_sympd(M);
+      u_list_.subvec(i * u_nrows_, (i + 1) * u_nrows_ - 1) = X * (M_inv * C);
+    }
+  }
+
+  arma::uvec init_idx_out() {
+    // generate the complete index
+    arma::vec idx = arma::linspace(0, u_nrows_ - 1, u_nrows_);
+    arma::uvec uidx = arma::conv_to<arma::uvec>::from(idx);
+
+    // get the index not included in complete index
+    return std_setdiff(uidx, idx_in_);
+  }
+
+  // evaluate remove_one
+  arma::vec comp_val_out_vec() const {
+    arma::mat val_out_mat(idx_in_.n_elem, nlist_, arma::fill::zeros);
+#pragma omp parallel for
+    for (std::size_t j = 0; j < nlist_; ++j) {
+      arma::mat A = get_A(j);
+      arma::vec u = get_u(j);
+      arma::vec u_idx_in = u.elem(idx_in_);
+      for (std::size_t i = 0; i < idx_in_.n_elem; ++i) {
+        val_out_mat(i,j) = remove_one(A, i, u_idx_in);
+      }
+    }
+
+    return val_out_mat * weights_;
+  }
+
+  // evaluate add_one
+  arma::vec comp_val_in_vec() const {
+    arma::mat val_in_mat(idx_out_.n_elem,nlist_,arma::fill::zeros);
+#pragma omp parallel for
+    for (arma::uword j = 0; j < nlist_; ++j) {
+      arma::mat A = get_A(j);
+      arma::mat sig = get_sig(j);
+      arma::vec u = get_u(j);
+
+      for (arma::uword i = 0; i < idx_out_.n_elem; ++i) {
+        arma::uword ii = idx_out_(i);
+        val_in_mat(i,j) =
+          add_one(A, sig(ii, ii), sig.submat(idx_in_, arma::uvec({ii})),
+                 u.elem(arma::join_cols(idx_in_, arma::uvec({ii}))));
+      }
+    }
+
+    return val_in_mat * weights_;
+  }
+
+  void reorder_obs() {
+    idx_out_ = init_idx_out();
+
+    // find one index from idx_in to remove
+    // which results in largest val of remove_one()
+    arma::vec val_out_vec = comp_val_out_vec();
+    arma::uvec indices1 = arma::sort_index(val_out_vec, "descend");
+    idx_in_ = idx_in_.rows(indices1);
+
+    for (arma::uword j = 0; j < nlist_; ++j) {
+      arma::mat A = get_A(j);
+      A = A.submat(indices1, indices1);
+      A_list_.rows(j*A_nrows_, (j+1)*A_nrows_-1) = A;
+    }
+
+    // find one index from idx_out to add (swap)
+    // which results in largest val of add_one()
+    arma::vec val_in_vec = comp_val_in_vec();
+    arma::uvec indices2 = arma::sort_index(val_in_vec, "descend");
+    idx_out_ = idx_out_.rows(indices2);
+  }
+};
+
+// [[Rcpp::export]]
+Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights) {
+  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, true);
+  hc.grad_robust_step();
+  return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
+                            Named("idx_out") = hc.idx_out_,
+                            Named("best_val_vec") = hc.best_val_vec_);
+}

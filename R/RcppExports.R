@@ -49,6 +49,14 @@ GradRobust <- function(nlist, idx_in, A_list, M_list, C_list, X_list, sig_list, 
     .Call(`_codco_GradRobust`, nlist, idx_in, A_list, M_list, C_list, X_list, sig_list, u_list, weights, tol, trace)
 }
 
+uvec_minus <- function(v, rm_idx) {
+    .Call(`_codco_uvec_minus`, v, rm_idx)
+}
+
+GradRobustStep <- function(idx_in, C_list, X_list, sig_list, weights) {
+    .Call(`_codco_GradRobustStep`, idx_in, C_list, X_list, sig_list, weights)
+}
+
 rcpparma_hello_world <- function() {
     .Call(`_codco_rcpparma_hello_world`)
 }

@@ -331,10 +331,12 @@ arma::uvec GradRobust(arma::uword nlist, arma::uvec idx_in, arma::mat A_list,
 
 // [[Rcpp::export]]
 arma::uvec uvec_minus(const arma::uvec &v, arma::uword rm_idx) {
+  arma::uword n = v.size();
+  if (rm_idx == 0) return v.tail(n-1);
+  if (rm_idx == n-1) return v.head(n-1);
   arma::uvec res(v.size()-1);
-  for (arma::uword i = 0, j = 0; i < v.size(); ++i) {
-    if (i != rm_idx) res(j++) = v(i);
-  }
+  res.head(rm_idx) = v.head(rm_idx);
+  res.tail(n-1-rm_idx) = v.tail(n-1-rm_idx);
   return res;
 }
 
@@ -421,16 +423,12 @@ public:
 
   double comp_c_obj_fun() {
     for (arma::uword j = 0; j < nlist_; ++j) {
-      arma::mat M = get_M(j);
-      arma::vec C = get_C(j);
-      new_val_vec_(j) = c_obj_fun(M, C);
+      new_val_vec_(j) = c_obj_fun(get_M(j), get_C(j));
     }
     return arma::dot(new_val_vec_, weights_);
   }
   void grad_robust_step() {
     double new_val = comp_c_obj_fun();
-    Rcpp::Rcout << "DEBUGnew_val = " << new_val << std::endl;
-
     reorder_obs();
 
     double diff = -1.0;
@@ -438,23 +436,19 @@ public:
     // we now need diff to be negative
     while (diff < 0) {
       double val = new_val;
-      i = i + 1;
+      ++i;
       best_val_vec_ = new_val_vec_;
 
       Update_rm1A_list(0);
       Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
-
       new_val = comp_c_obj_fun();
+
       diff = new_val - val;
 
       if (trace_) Rcpp::Rcout << "\nIter " << i << ": " << val << std::endl;
 
       if (diff < 0) {
-        arma::uword swap_idx = idx_in_(0);
-        idx_in_ = join_idx(idx_in_.rows(1, n_-1), idx_out_(0));
-        idx_out_ = join_idx(idx_out_.rows(1, n_-1), swap_idx);
-        A_list_ = A_list_sub_;
-        Update_u_list();
+        UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
       } else {
         // if no easy swaps can be made, reorder the list and try the top one again
         ++i;
@@ -464,17 +458,14 @@ public:
         Update_rm1A_list(0);
         Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
         new_val = comp_c_obj_fun();
+
         diff = new_val - val;
 
         // we are now looking for the smallest value rather than largest so diff<0
         if (trace_) Rcpp::Rcout << "\nIter (reorder)" << i << ": " << val << std::endl;
 
         if (diff < 0) {
-          arma::uword swap_idx = idx_in_(0);
-          idx_in_ = arma::join_cols(idx_in_.rows(1, n_-1), arma::uvec({idx_out_(0)}));
-          idx_out_ = arma::join_cols(idx_out_.rows(1, n_-1), arma::uvec({swap_idx}));
-          A_list_ = A_list_sub_;
-          Update_u_list();
+          UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
         } else {
           // if reordering doesn't find a better solution then check all the neighbours
           // check optimality and see if there are any neighbours that improve the solution
@@ -485,8 +476,14 @@ public:
           for (arma::uword obs = 0; obs < n_; ++obs)  {
             if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
             Update_rm1A_list(obs);
+
+            arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
+            bool idx_in_updated = false;
             for (arma::uword obs_j = 0; obs_j < N_ - n_; ++obs_j) {
-              const arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
+              if (idx_in_updated) {
+                inx_in_no_obs = uvec_minus(idx_in_, obs);
+                idx_in_updated = false;
+              }
               const arma::uvec inx_out_no_obsj = uvec_minus(idx_out_, obs_j);
 
               arma::vec val_in_mat(nlist_, arma::fill::zeros);
@@ -504,11 +501,8 @@ public:
                 if (new_val - val < 0) {
                   diff = new_val - val;
                   if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val;
-                  arma::uword swap_idx = idx_in_(obs);
-                  idx_in_ = join_idx(inx_in_no_obs, idx_out_(obs_j));
-                  idx_out_ = join_idx(inx_out_no_obsj, swap_idx);
-                  A_list_ = A_list_sub_;
-                  Update_u_list();
+                  UpdateResult(inx_in_no_obs, inx_out_no_obsj, obs, obs_j);
+                  idx_in_updated = true;
                   break;
                 } // if (new_val - val < 0)
               } else break; // if (val - val_in < 0)
@@ -565,7 +559,7 @@ private:
       arma::mat Asub = get_Asub(i);
       arma::mat M = X.t() * Asub * X;
       M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = M;
-      if (!M.is_sympd()) {
+      if (flag && !M.is_sympd()) {
         if (stop) Rcpp::stop("M not positive semi-definite.");
         else flag = false;
       }
@@ -583,6 +577,15 @@ private:
     }
   }
 
+  void UpdateResult(const arma::uvec &in_vec, const arma::uvec &out_vec,
+                    arma::uword obs = 0, arma::uword obs_j = 0) {
+    arma::uword swap_idx = idx_in_(obs);
+    idx_in_ = join_idx(in_vec, idx_out_(obs_j));
+    idx_out_ = join_idx(out_vec, swap_idx);
+    A_list_ = A_list_sub_;
+    Update_u_list();
+  }
+
   arma::uvec init_idx_out() {
     // generate the complete index
     arma::vec idx = arma::linspace(0, u_nrows_ - 1, u_nrows_);
@@ -595,7 +598,6 @@ private:
   // evaluate remove_one
   arma::vec comp_val_out_vec() const {
     arma::mat val_out_mat(idx_in_.n_elem, nlist_, arma::fill::zeros);
-#pragma omp parallel for
     for (std::size_t j = 0; j < nlist_; ++j) {
       arma::mat A = get_A(j);
       arma::vec u = get_u(j);
@@ -617,7 +619,6 @@ private:
   // evaluate add_one
   arma::vec comp_val_in_vec() {
     arma::mat val_in_mat(idx_out_.n_elem,nlist_,arma::fill::zeros);
-#pragma omp parallel for
     for (arma::uword j = 0; j < nlist_; ++j) {
       arma::mat A = get_A(j);
       arma::mat sig = get_sig(j);

@@ -445,7 +445,7 @@ public:
 
       diff = new_val - val;
 
-      if (trace_) Rcpp::Rcout << "\nIter " << i << ": " << val << std::endl;
+      if (trace_) Rcpp::Rcout << "Iter " << i << ": " << val << std::endl;
 
       if (diff < 0) {
         UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
@@ -462,7 +462,7 @@ public:
         diff = new_val - val;
 
         // we are now looking for the smallest value rather than largest so diff<0
-        if (trace_) Rcpp::Rcout << "\nIter (reorder)" << i << ": " << val << std::endl;
+        if (trace_) Rcpp::Rcout << "Iter (reorder)" << i << ": " << val << std::endl;
 
         if (diff < 0) {
           UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
@@ -472,7 +472,7 @@ public:
           // I have got it to go through in order of the ordered observations, and then break the loop if
           // it reaches one with a positive gradient because we know the ones after that will be worse
 
-          if (trace_) Rcpp::Rcout << "\nChecking optimality..." << std::endl;
+          if (trace_) Rcpp::Rcout << "Checking optimality..." << std::endl;
           for (arma::uword obs = 0; obs < n_; ++obs)  {
             if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
             Update_rm1A_list(obs);
@@ -500,7 +500,7 @@ public:
 
                 if (new_val - val < 0) {
                   diff = new_val - val;
-                  if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val;
+                  if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val << std::endl;
                   UpdateResult(inx_in_no_obs, inx_out_no_obsj, obs, obs_j);
                   idx_in_updated = true;
                   break;

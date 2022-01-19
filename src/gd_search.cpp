@@ -402,6 +402,9 @@ public:
   arma::mat get_A(arma::uword i) const {
     return A_list_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1);
   }
+  arma::mat get_Asub(arma::uword i) const {
+    return A_list_sub_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1);
+  }
   arma::mat get_rm1A(arma::uword i) const {
     return rm1A_list_.rows(i * rm1A_nrows_, (i + 1) * rm1A_nrows_ - 1);
   }
@@ -417,7 +420,6 @@ public:
   }
 
   double comp_c_obj_fun() {
-//    arma::vec new_val_vec(nlist_, arma::fill::zeros);
     for (arma::uword j = 0; j < nlist_; ++j) {
       arma::mat M = get_M(j);
       arma::vec C = get_C(j);
@@ -439,7 +441,9 @@ public:
       i = i + 1;
       best_val_vec_ = new_val_vec_;
 
-      Update_M_list2();
+      Update_rm1A_list(0);
+      Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
+
       new_val = comp_c_obj_fun();
       diff = new_val - val;
 
@@ -449,8 +453,6 @@ public:
         arma::uword swap_idx = idx_in_(0);
         idx_in_ = join_idx(idx_in_.rows(1, n_-1), idx_out_(0));
         idx_out_ = join_idx(idx_out_.rows(1, n_-1), swap_idx);
-        // idx_in_ = arma::join_cols(idx_in_.rows(1, n_-1), arma::uvec({idx_out_(0)}));
-        // idx_out_ = arma::join_cols(idx_out_.rows(1, n_-1), arma::uvec({swap_idx}));
         A_list_ = A_list_sub_;
         Update_u_list();
       } else {
@@ -458,7 +460,9 @@ public:
         ++i;
 
         reorder_obs();
-        Update_M_list2();
+
+        Update_rm1A_list(0);
+        Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
         new_val = comp_c_obj_fun();
         diff = new_val - val;
 
@@ -482,24 +486,18 @@ public:
             if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
             Update_rm1A_list(obs);
             for (arma::uword obs_j = 0; obs_j < N_ - n_; ++obs_j) {
+              const arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
+              const arma::uvec inx_out_no_obsj = uvec_minus(idx_out_, obs_j);
+
               arma::vec val_in_mat(nlist_, arma::fill::zeros);
               for (arma::uword idx = 0; idx < nlist_; ++idx) {
-                arma::vec u = get_u(idx);
-                arma::mat sig = get_sig(idx);
-                arma::mat rm1A = get_rm1A(idx);
-                //arma::mat rm1A = rm1A_list.rows(idx * (A_nrows_-1), (idx + 1) * (A_nrows_-1) - 1);
-                arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
-                arma::uword ii = idx_out_(obs_j);
-                val_in_mat(idx) = add_one(rm1A,sig(ii,ii),
-                           sig.submat(inx_in_no_obs, arma::uvec({ii})),
-                           u.elem(arma::join_cols(inx_in_no_obs, arma::uvec({ii}))));
+                val_in_mat(idx) = add_one_helper(get_rm1A(idx), get_sig(idx), get_u(idx),
+                           inx_in_no_obs, idx_out_(obs_j));
               } // for loop
-
               double val_in = arma::sum(val_in_mat * weights_);
 
               if (val - val_in < 0) {
-                //bool flag = Update_M_list3(obs, obs_j, rm1A_list);
-                bool flag = Update_M_list3(obs, obs_j);
+                bool flag = Update_M_list2(inx_in_no_obs, idx_out_(obs_j), false);
                 if (!flag) continue;
                 new_val = comp_c_obj_fun();
 
@@ -507,8 +505,8 @@ public:
                   diff = new_val - val;
                   if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val;
                   arma::uword swap_idx = idx_in_(obs);
-                  idx_in_ = arma::join_cols(uvec_minus(idx_in_, obs), arma::uvec({idx_out_(obs_j)}));
-                  idx_out_ = arma::join_cols(uvec_minus(idx_out_, obs_j), arma::uvec({swap_idx}));
+                  idx_in_ = join_idx(inx_in_no_obs, idx_out_(obs_j));
+                  idx_out_ = join_idx(inx_out_no_obsj, swap_idx);
                   A_list_ = A_list_sub_;
                   Update_u_list();
                   break;
@@ -532,6 +530,16 @@ private:
     }
   }
 
+  void Update_A_list_sub(const arma::uvec &indices, arma::uword ii) {
+    for (arma::uword i = 0; i < nlist_; ++i) {
+      arma::mat rm1A = get_rm1A(i);
+      arma::mat sig = get_sig(i);
+      arma::mat Asub = add_one_mat(rm1A, sig(ii, ii),
+                                   sig.submat(indices, arma::uvec({ii})));
+      A_list_sub_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1) = Asub;
+    }
+  }
+
   void Update_rm1A_list(arma::uword obs) {
     for (arma::uword idx = 0; idx < nlist_; ++idx) {
       arma::mat A = get_A(idx);
@@ -548,44 +556,19 @@ private:
     }
   }
 
-  void Update_M_list2() {
+  bool Update_M_list2(const arma::uvec &idx_vec, arma::uword ii, bool stop = true) {
+    Update_A_list_sub(idx_vec, ii);
+
+    bool flag = true;
     for (arma::uword i = 0; i < nlist_; ++i) {
-      arma::mat sig = get_sig(i);
-
-      // compute the new A without the index of idx_rm
-      arma::mat A = get_A(i);
-      arma::mat rm1A = remove_one_mat(A, 0);
-      arma::mat A_tmp = add_one_mat(rm1A, sig(idx_out_(0), idx_out_(0)),
-                                    sig.submat(idx_in_.tail(n_-1), arma::uvec({idx_out_(0)})));
-
-      A_list_sub_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1) = A_tmp;
-      arma::mat X = get_X(i).rows(arma::join_cols(idx_in_.tail(n_-1), arma::uvec({idx_out_(0)})));
-
-      arma::mat M = X.t() * A_tmp * X;
+      arma::mat X = get_X(i).rows(join_idx(idx_vec, ii));
+      arma::mat Asub = get_Asub(i);
+      arma::mat M = X.t() * Asub * X;
       M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = M;
       if (!M.is_sympd()) {
-        Rcpp::stop("M not positive semi-definite.");
+        if (stop) Rcpp::stop("M not positive semi-definite.");
+        else flag = false;
       }
-    }
-  }
-
-  bool Update_M_list3(arma::uword obs, arma::uword obs_j) {
-    bool flag = true;
-    for (arma::uword idx = 0; idx < nlist_; ++idx) {
-      arma::vec u = get_u(idx);
-      arma::mat sig = get_sig(idx);
-      arma::mat rm1A = get_rm1A(idx);
-
-      arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
-      arma::uword ii = idx_out_(obs_j);
-
-      arma::mat A_tmp = add_one_mat(rm1A, sig(ii, ii),
-                                    sig.submat(inx_in_no_obs, arma::uvec({ii})));
-      A_list_sub_.rows(idx * A_nrows_, (idx + 1) * A_nrows_ - 1) = A_tmp;
-      arma::mat X = get_X(idx).rows(arma::join_cols(inx_in_no_obs, arma::uvec({ii})));
-      arma::mat M = X.t() * A_tmp * X;
-      M_list_.rows(idx * M_nrows_, (idx + 1) * M_nrows_ - 1) = M;
-      if (!M.is_sympd()) flag = false;
     }
     return flag;
   }
@@ -625,8 +608,14 @@ private:
     return val_out_mat * weights_;
   }
 
+  double add_one_helper(const arma::mat &A, const arma::mat &sig, const arma::vec &u,
+                        const arma::uvec &idx_vec, arma::uword ii) {
+    return add_one(A, sig(ii, ii), sig.submat(idx_vec, arma::uvec({ii})),
+            u.elem(join_idx(idx_vec, ii)));
+  }
+
   // evaluate add_one
-  arma::vec comp_val_in_vec() const {
+  arma::vec comp_val_in_vec() {
     arma::mat val_in_mat(idx_out_.n_elem,nlist_,arma::fill::zeros);
 #pragma omp parallel for
     for (arma::uword j = 0; j < nlist_; ++j) {
@@ -635,10 +624,7 @@ private:
       arma::vec u = get_u(j);
 
       for (arma::uword i = 0; i < idx_out_.n_elem; ++i) {
-        arma::uword ii = idx_out_(i);
-        val_in_mat(i,j) =
-          add_one(A, sig(ii, ii), sig.submat(idx_in_, arma::uvec({ii})),
-                 u.elem(arma::join_cols(idx_in_, arma::uvec({ii}))));
+        val_in_mat(i,j) = add_one_helper(A, sig, u, idx_in_, idx_out_(i));
       }
     }
 

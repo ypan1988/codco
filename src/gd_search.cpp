@@ -401,6 +401,9 @@ public:
   arma::mat get_sig(arma::uword i) const {
     return sig_list_.rows(i * sig_nrows_, (i + 1) * sig_nrows_ - 1);
   }
+  double get_sig(arma::uword i, arma::uword ii) const {
+    return sig_list_.rows(i * sig_nrows_, (i + 1) * sig_nrows_ - 1).operator()(ii,ii);
+  }
   arma::mat get_A(arma::uword i) const {
     return A_list_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1);
   }
@@ -417,7 +420,7 @@ public:
     return u_list_.subvec(i * u_nrows_, (i + 1) * u_nrows_ - 1);
   }
 
-  arma::uvec join_idx(arma::uvec idx, arma::uword elem) {
+  arma::uvec join_idx(const arma::uvec &idx, arma::uword elem) {
     return arma::join_cols(idx, arma::uvec({elem}));
   }
 
@@ -429,6 +432,7 @@ public:
   }
   void grad_robust_step() {
     double new_val = comp_c_obj_fun();
+
     reorder_obs();
 
     double diff = -1.0;
@@ -488,8 +492,8 @@ public:
 
               arma::vec val_in_mat(nlist_, arma::fill::zeros);
               for (arma::uword idx = 0; idx < nlist_; ++idx) {
-                val_in_mat(idx) = add_one_helper(get_rm1A(idx), get_sig(idx), get_u(idx),
-                           inx_in_no_obs, idx_out_(obs_j));
+                val_in_mat(idx) = add_one_helper(get_rm1A(idx), get_u(idx),
+                           inx_in_no_obs, idx, idx_out_(obs_j));
               } // for loop
               double val_in = arma::sum(val_in_mat * weights_);
 
@@ -518,34 +522,42 @@ public:
 private:
   void Update_A_list() {
     for (arma::uword i = 0; i < nlist_; ++i) {
-      arma::mat sig = get_sig(i);
-      arma::mat tmp = sig.submat(idx_in_, idx_in_);
+      const arma::mat sig = get_sig(i);
+      const arma::mat tmp = sig.submat(idx_in_, idx_in_);
       A_list_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1) = tmp.i();
     }
   }
 
   void Update_A_list_sub(const arma::uvec &indices, arma::uword ii) {
+    // static double stime = 0.0;
+    // static arma::wall_clock timer;
+
     for (arma::uword i = 0; i < nlist_; ++i) {
-      arma::mat rm1A = get_rm1A(i);
-      arma::mat sig = get_sig(i);
-      arma::mat Asub = add_one_mat(rm1A, sig(ii, ii),
-                                   sig.submat(indices, arma::uvec({ii})));
+      // const arma::mat rm1A = get_rm1A(i);
+      // timer.tic();
+      //const arma::mat sig = get_sig(i);
+      const arma::mat Asub = add_one_mat(get_rm1A(i), get_sig(i, ii),
+                                         sig_list_.submat(i * sig_nrows_ + indices, arma::uvec({ii})));
+      // stime += timer.toc();
       A_list_sub_.rows(i * A_nrows_, (i + 1) * A_nrows_ - 1) = Asub;
+
+
     }
+    // Rcpp::Rcout << "\nDEBUG stime = " << stime << std::endl;
   }
 
   void Update_rm1A_list(arma::uword obs) {
     for (arma::uword idx = 0; idx < nlist_; ++idx) {
-      arma::mat A = get_A(idx);
-      arma::mat rm1A = remove_one_mat(A, obs);
+      const arma::mat A = get_A(idx);
+      const arma::mat rm1A = remove_one_mat(A, obs);
       rm1A_list_.rows(idx * rm1A_nrows_, (idx + 1) * rm1A_nrows_ - 1) = rm1A;
     }
   }
 
   void Update_M_list() {
     for (arma::uword i = 0; i < nlist_; ++i) {
-      arma::mat X = get_X(i).rows(idx_in_);
-      arma::mat A = get_A(i);
+      const arma::mat X = get_X(i).rows(idx_in_);
+      const arma::mat A = get_A(i);
       M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = X.t() * A * X;
     }
   }
@@ -564,22 +576,23 @@ private:
         else flag = false;
       }
     }
+
     return flag;
   }
 
   void Update_u_list() {
     for (arma::uword i = 0; i < nlist_; ++i) {
-      arma::mat X = get_X(i);
-      arma::vec C = get_C(i);
-      arma::mat M = get_M(i);
-      arma::mat M_inv = arma::inv_sympd(M);
+      const arma::mat X = get_X(i);
+      const arma::vec C = get_C(i);
+      const arma::mat M = get_M(i);
+      const arma::mat M_inv = arma::inv_sympd(M);
       u_list_.subvec(i * u_nrows_, (i + 1) * u_nrows_ - 1) = X * (M_inv * C);
     }
   }
 
   void UpdateResult(const arma::uvec &in_vec, const arma::uvec &out_vec,
                     arma::uword obs = 0, arma::uword obs_j = 0) {
-    arma::uword swap_idx = idx_in_(obs);
+    const arma::uword swap_idx = idx_in_(obs);
     idx_in_ = join_idx(in_vec, idx_out_(obs_j));
     idx_out_ = join_idx(out_vec, swap_idx);
     A_list_ = A_list_sub_;
@@ -599,9 +612,9 @@ private:
   arma::vec comp_val_out_vec() const {
     arma::mat val_out_mat(idx_in_.n_elem, nlist_, arma::fill::zeros);
     for (std::size_t j = 0; j < nlist_; ++j) {
-      arma::mat A = get_A(j);
-      arma::vec u = get_u(j);
-      arma::vec u_idx_in = u.elem(idx_in_);
+      const arma::mat A = get_A(j);
+      const arma::vec u = get_u(j);
+      const arma::vec u_idx_in = u.elem(idx_in_);
       for (std::size_t i = 0; i < idx_in_.n_elem; ++i) {
         val_out_mat(i,j) = remove_one(A, i, u_idx_in);
       }
@@ -610,9 +623,10 @@ private:
     return val_out_mat * weights_;
   }
 
-  double add_one_helper(const arma::mat &A, const arma::mat &sig, const arma::vec &u,
-                        const arma::uvec &idx_vec, arma::uword ii) {
-    return add_one(A, sig(ii, ii), sig.submat(idx_vec, arma::uvec({ii})),
+  double add_one_helper(const arma::mat &A, const arma::vec &u, const arma::uvec &idx_vec,
+                        arma::uword i, arma::uword ii) {
+    arma::uvec indices = i * sig_nrows_ + idx_vec;
+    return add_one(A, get_sig(i, ii), sig_list_.submat(indices, arma::uvec({ii})),
             u.elem(join_idx(idx_vec, ii)));
   }
 
@@ -620,12 +634,12 @@ private:
   arma::vec comp_val_in_vec() {
     arma::mat val_in_mat(idx_out_.n_elem,nlist_,arma::fill::zeros);
     for (arma::uword j = 0; j < nlist_; ++j) {
-      arma::mat A = get_A(j);
-      arma::mat sig = get_sig(j);
-      arma::vec u = get_u(j);
+      const arma::mat A = get_A(j);
+      const arma::mat sig = get_sig(j);
+      const arma::vec u = get_u(j);
 
       for (arma::uword i = 0; i < idx_out_.n_elem; ++i) {
-        val_in_mat(i,j) = add_one_helper(A, sig, u, idx_in_, idx_out_(i));
+        val_in_mat(i,j) = add_one_helper(A, u, idx_in_, j, idx_out_(i));
       }
     }
 

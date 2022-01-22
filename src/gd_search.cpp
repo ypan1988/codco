@@ -524,6 +524,62 @@ public:
     } // while loop
   }
 
+  double choose_swap_robust(arma::uvec &idx_in_tmp) {
+    idx_in_tmp = idx_in_;
+    idx_out_ = init_idx_out();
+
+    // find one index from idx_in to remove
+    // which results in largest val of remove_one()
+    const arma::vec val_out_vec = comp_val_out_vec();
+    int idx_rm = val_out_vec.index_max();
+
+    // compute the new A without the index of idx_rm
+    Update_rm1A_list(idx_rm);
+
+    // remove index idx_rm from idx_in
+    idx_in_.shed_row(idx_rm);
+
+    // find one index from idx_out to add (swap)
+    // which results in largest val of add_one()
+    const arma::vec val_in_vec = comp_val_in_vec(true);
+    arma::uword indexmax = val_in_vec.index_max();
+
+    arma::uword idx_swap = idx_out_(indexmax);
+
+    // compute the new A with the index of idx_swap
+    Update_A_list_sub(idx_in_, idx_swap);
+    idx_in_ = join_idx(idx_in_, idx_swap);
+    idx_in_.swap(idx_in_tmp);
+
+    return val_in_vec(indexmax);
+  }
+
+  void grad_robust_alg1() {
+    double new_val = comp_c_obj_fun();
+
+    double diff = -1.0;
+    int i = 0;
+    // we now need diff to be negative
+    while (diff < 0) {
+      double val = new_val;
+      i = i + 1;
+
+      arma::uvec out2;
+      new_val = choose_swap_robust(out2);
+
+      //we have to now recalculate all the lists of matrices for the new design proposed by the swap
+      A_list_ = A_list_sub_;
+      Update_M_list(out2);
+      Update_u_list();
+      new_val = comp_c_obj_fun();
+
+      diff = new_val - val;
+      // we are now looking for the smallest value rather than largest so diff<0
+      if (diff < 0) idx_in_ = out2;
+      if (trace_) Rcpp::Rcout << "\rIter " << i << ": " << diff << std::endl;
+    }
+  }
+
 private:
   void Update_A_list() {
     for (arma::uword i = 0; i < nlist_; ++i) {
@@ -556,13 +612,19 @@ private:
       M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = X.t() * A * X;
     }
   }
+  void Update_M_list(const arma::uvec &idx_vec) {
+    for (arma::uword i = 0; i < nlist_; ++i) {
+      const arma::mat X = get_X(i, idx_vec);
+      const arma::mat A = get_A(i);
+      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = X.t() * A * X;
+    }
+  }
 
   bool Update_M_list2(const arma::uvec &idx_vec, arma::uword ii, bool stop = true) {
     Update_A_list_sub(idx_vec, ii);
 
     bool flag = true;
     for (arma::uword i = 0; i < nlist_; ++i) {
-      // const arma::mat X = get_X(i).rows(join_idx(idx_vec, ii));
       const arma::mat X = get_X(i, join_idx(idx_vec, ii));
       const arma::mat Asub = get_Asub(i);
       const arma::mat M = X.t() * Asub * X;
@@ -606,6 +668,7 @@ private:
   // evaluate remove_one
   arma::vec comp_val_out_vec() const {
     arma::mat val_out_mat(idx_in_.n_elem, nlist_, arma::fill::zeros);
+#pragma omp parallel for
     for (std::size_t j = 0; j < nlist_; ++j) {
       const arma::mat A = get_A(j);
       const arma::vec u_idx_in = get_u(j, idx_in_);
@@ -625,10 +688,11 @@ private:
   }
 
   // evaluate add_one
-  arma::vec comp_val_in_vec() {
+  arma::vec comp_val_in_vec(bool use_rm1A = false) {
     arma::mat val_in_mat(idx_out_.n_elem,nlist_,arma::fill::zeros);
+#pragma omp parallel for
     for (arma::uword j = 0; j < nlist_; ++j) {
-      const arma::mat A = get_A(j);
+      const arma::mat A = use_rm1A ? get_rm1A(j) : get_A(j);
       const arma::vec u = get_u(j);
 
       for (arma::uword i = 0; i < idx_out_.n_elem; ++i) {
@@ -665,6 +729,15 @@ private:
 Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights) {
   HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, true);
   hc.grad_robust_step();
+  return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
+                            Named("idx_out") = hc.idx_out_,
+                            Named("best_val_vec") = hc.best_val_vec_);
+}
+
+// [[Rcpp::export]]
+Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights) {
+  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, true);
+  hc.grad_robust_alg1();
   return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
                             Named("idx_out") = hc.idx_out_,
                             Named("best_val_vec") = hc.best_val_vec_);

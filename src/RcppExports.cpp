@@ -210,6 +210,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// GradRobustAlg1
+Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights);
+RcppExport SEXP _codco_GradRobustAlg1(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::uvec >::type idx_in(idx_inSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type C_list(C_listSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type X_list(X_listSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type sig_list(sig_listSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
+    rcpp_result_gen = Rcpp::wrap(GradRobustAlg1(idx_in, C_list, X_list, sig_list, weights));
+    return rcpp_result_gen;
+END_RCPP
+}
 // rcpparma_hello_world
 arma::mat rcpparma_hello_world();
 RcppExport SEXP _codco_rcpparma_hello_world() {
@@ -269,6 +284,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_codco_GradRobust", (DL_FUNC) &_codco_GradRobust, 11},
     {"_codco_uvec_minus", (DL_FUNC) &_codco_uvec_minus, 2},
     {"_codco_GradRobustStep", (DL_FUNC) &_codco_GradRobustStep, 5},
+    {"_codco_GradRobustAlg1", (DL_FUNC) &_codco_GradRobustAlg1, 5},
     {"_codco_rcpparma_hello_world", (DL_FUNC) &_codco_rcpparma_hello_world, 0},
     {"_codco_rcpparma_outerproduct", (DL_FUNC) &_codco_rcpparma_outerproduct, 1},
     {"_codco_rcpparma_innerproduct", (DL_FUNC) &_codco_rcpparma_innerproduct, 1},

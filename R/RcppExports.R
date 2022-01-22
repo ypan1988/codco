@@ -57,6 +57,10 @@ GradRobustStep <- function(idx_in, C_list, X_list, sig_list, weights) {
     .Call(`_codco_GradRobustStep`, idx_in, C_list, X_list, sig_list, weights)
 }
 
+GradRobustAlg1 <- function(idx_in, C_list, X_list, sig_list, weights) {
+    .Call(`_codco_GradRobustAlg1`, idx_in, C_list, X_list, sig_list, weights)
+}
+
 rcpparma_hello_world <- function() {
     .Call(`_codco_rcpparma_hello_world`)
 }

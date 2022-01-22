@@ -363,7 +363,6 @@ grad_robust_step <- function(idx_in,
   # the objective function here is now c^T M^-1 c - i've implemented c_obj_func in gd_search.cpp
   new_val_vec <- matrix(sapply(1:length(A_list),function(i)c_obj_fun(M_list[[i]], C_list[[i]])),nrow=1)
   new_val <- as.numeric(new_val_vec %*% w)
-  cat("DEBUGnew_val = ", new_val)
 
   diff <- -1
   i <- 0
@@ -447,7 +446,6 @@ grad_robust_step <- function(idx_in,
         if(!check_psd(M_list[[idx]]))stop(paste0("M not positive semi-definite. Column ",which(colSums(M_list[[idx]])==0),
                                                  " of design ",idx," is not part of an optimal design."))
       }
-
 
       #calculate values for the new design - this is changed to new objective function
       new_val_vec <- matrix(sapply(1:length(A_list),function(j)c_obj_fun(M_list[[j]], C_list[[j]])),nrow=1)
@@ -714,10 +712,15 @@ grad_robust2 <-function(idx_in, C_list, X_list, sig_list, w=NULL, tol=1e-9,
     u_list[[i]] <- cM %*% t(X_list[[i]])
   }
 
-  idx_in <- GradRobust(length(sig_list), idx_in-1, do.call(rbind, A_list),
-                       do.call(rbind, M_list),do.call(rbind, C_list),do.call(rbind, X_list),
-                       do.call(rbind, sig_list), do.call(cbind, u_list), w, tol, trace)
-  idx_in <- idx_in + 1
+  out_list <- GradRobustAlg1(idx_in -1, do.call(rbind, C_list), do.call(rbind, X_list), do.call(rbind, sig_list), weights = w)
+  idx_in <- out_list[["idx_in"]] + 1
+  idx_out <- out_list[["idx_out"]] + 1
+  best_val_vec <- out_list[["best_val_vec"]]
+
+  # idx_in <- GradRobust(length(sig_list), idx_in-1, do.call(rbind, A_list),
+  #                      do.call(rbind, M_list),do.call(rbind, C_list),do.call(rbind, X_list),
+  #                      do.call(rbind, sig_list), do.call(cbind, u_list), w, tol, trace)
+  # idx_in <- idx_in + 1
 
   # as a check, see if the next swap would mean that M is not positive semi-definite, in which
   # case the algorithm has terminated early and the solution is not in this design

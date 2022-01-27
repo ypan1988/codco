@@ -449,6 +449,7 @@ public:
       best_val_vec_ = new_val_vec_;
 
       Update_rm1A_list(0);
+      Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
       Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
       new_val = comp_c_obj_fun();
 
@@ -465,6 +466,7 @@ public:
         reorder_obs();
 
         Update_rm1A_list(0);
+        Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
         Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
         new_val = comp_c_obj_fun();
 
@@ -503,6 +505,7 @@ public:
               double val_in = arma::sum(val_in_mat * weights_);
 
               if (val - val_in < 0) {
+                Update_A_list_sub(inx_in_no_obs, idx_out_(obs_j));
                 bool flag = Update_M_list2(inx_in_no_obs, idx_out_(obs_j), false);
                 if (!flag) continue;
                 new_val = comp_c_obj_fun();
@@ -569,7 +572,7 @@ public:
 
       //we have to now recalculate all the lists of matrices for the new design proposed by the swap
       A_list_ = A_list_sub_;
-      Update_M_list(out2);
+      Update_M_list(out2, true);
       Update_u_list();
       new_val = comp_c_obj_fun();
 
@@ -605,24 +608,25 @@ private:
     }
   }
 
-  void Update_M_list() {
+  void Update_M_list(const arma::uvec &idx_vec = {}, bool checkM = false) {
     for (arma::uword i = 0; i < nlist_; ++i) {
-      const arma::mat X = get_X(i, idx_in_);
+      const arma::mat X = idx_vec.empty() ?
+                          get_X(i, idx_in_) : get_X(i, idx_vec);
       const arma::mat A = get_A(i);
-      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = X.t() * A * X;
-    }
-  }
-  void Update_M_list(const arma::uvec &idx_vec) {
-    for (arma::uword i = 0; i < nlist_; ++i) {
-      const arma::mat X = get_X(i, idx_vec);
-      const arma::mat A = get_A(i);
-      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = X.t() * A * X;
+      const arma::mat M = X.t() * A * X;
+      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = M;
+      if (checkM && !M.is_sympd()) {
+        const arma::vec colsum = arma::trans(arma::sum(M, 0));
+        const arma::uvec colidx = arma::find(colsum == 0);
+        Rcpp::Rcout << "ERROR MSG:\n"
+                    << "Design " << i+1 << " has the following column(s) with zero colsum:\n"
+                    << colidx.t() + 1 << std::endl;
+        Rcpp::stop("M not positive semi-definite.");
+      }
     }
   }
 
   bool Update_M_list2(const arma::uvec &idx_vec, arma::uword ii, bool stop = true) {
-    Update_A_list_sub(idx_vec, ii);
-
     bool flag = true;
     for (arma::uword i = 0; i < nlist_; ++i) {
       const arma::mat X = get_X(i, join_idx(idx_vec, ii));

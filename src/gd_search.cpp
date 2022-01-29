@@ -450,7 +450,7 @@ public:
 
       Update_rm1A_list(0);
       Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
-      Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
+      Update_M_list(join_idx(idx_in_.tail(n_-1), idx_out_(0)), true, 2);
       new_val = comp_c_obj_fun();
 
       diff = new_val - val;
@@ -467,7 +467,7 @@ public:
 
         Update_rm1A_list(0);
         Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
-        Update_M_list2(idx_in_.tail(n_-1), idx_out_(0));
+        Update_M_list(join_idx(idx_in_.tail(n_-1), idx_out_(0)), true, 2);
         new_val = comp_c_obj_fun();
 
         diff = new_val - val;
@@ -506,7 +506,7 @@ public:
 
               if (val - val_in < 0) {
                 Update_A_list_sub(inx_in_no_obs, idx_out_(obs_j));
-                bool flag = Update_M_list2(inx_in_no_obs, idx_out_(obs_j), false);
+                bool flag = Update_M_list(join_idx(inx_in_no_obs, idx_out_(obs_j)), true, 1);
                 if (!flag) continue;
                 new_val = comp_c_obj_fun();
 
@@ -572,7 +572,7 @@ public:
 
       //we have to now recalculate all the lists of matrices for the new design proposed by the swap
       A_list_ = A_list_sub_;
-      Update_M_list(out2, true);
+      Update_M_list(out2, false, 2);
       Update_u_list();
       new_val = comp_c_obj_fun();
 
@@ -608,38 +608,32 @@ private:
     }
   }
 
-  void Update_M_list(const arma::uvec &idx_vec = {}, bool checkM = false) {
+  // idx_vec ---- user defined indices to get X; if empty, idx_in_ will be used
+  // useAsub ---- Should we get A from Asub_list_?
+  // check_M == 0 ---- No positive definite check for M is needed
+  //         == 1 ---- Do the check, return false if find not positive definite
+  //         == 2 ---- Do the check, stop function if find not positive definite
+  bool Update_M_list(const arma::uvec &idx_vec = {},
+                     bool useAsub = false, int check_M = 0) {
     for (arma::uword i = 0; i < nlist_; ++i) {
       const arma::mat X = idx_vec.empty() ?
                           get_X(i, idx_in_) : get_X(i, idx_vec);
-      const arma::mat A = get_A(i);
+      const arma::mat A = useAsub? get_Asub(i) : get_A(i);
       const arma::mat M = X.t() * A * X;
       M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = M;
-      if (checkM && !M.is_sympd()) {
-        const arma::vec colsum = arma::trans(arma::sum(M, 0));
-        const arma::uvec colidx = arma::find(colsum == 0);
-        Rcpp::Rcout << "ERROR MSG:\n"
-                    << "Design " << i+1 << " has the following column(s) with zero colsum:\n"
-                    << colidx.t() + 1 << std::endl;
-        Rcpp::stop("M not positive semi-definite.");
+      if (check_M && !M.is_sympd()) {
+        if (check_M == 1) return false;
+        else {
+          const arma::vec colsum = arma::trans(arma::sum(M, 0));
+          const arma::uvec colidx = arma::find(colsum == 0);
+          Rcpp::Rcout << "ERROR MSG:\n"
+                      << "Design " << i+1 << " has the following column(s) with zero colsum:\n"
+                      << colidx.t() + 1 << std::endl;
+          Rcpp::stop("M not positive semi-definite.");
+        }
       }
     }
-  }
-
-  bool Update_M_list2(const arma::uvec &idx_vec, arma::uword ii, bool stop = true) {
-    bool flag = true;
-    for (arma::uword i = 0; i < nlist_; ++i) {
-      const arma::mat X = get_X(i, join_idx(idx_vec, ii));
-      const arma::mat Asub = get_Asub(i);
-      const arma::mat M = X.t() * Asub * X;
-      M_list_.rows(i * M_nrows_, (i + 1) * M_nrows_ - 1) = M;
-      if (flag && !M.is_sympd()) {
-        if (stop) Rcpp::stop("M not positive semi-definite.");
-        else flag = false;
-      }
-    }
-
-    return flag;
+    return true;
   }
 
   void Update_u_list() {

@@ -529,7 +529,7 @@ public:
 
   double choose_swap_robust(arma::uvec &idx_in_tmp) {
     idx_in_tmp = idx_in_;
-    idx_out_ = init_idx_out();
+    init_idx_out();
 
     // find one index from idx_in to remove
     // which results in largest val of remove_one()
@@ -564,9 +564,9 @@ public:
     int i = 0;
     // we now need diff to be negative
     while (diff < 0) {
-      double val = new_val;
-      i = i + 1;
+      ++i;
 
+      double val = new_val;
       arma::uvec out2;
       new_val = choose_swap_robust(out2);
 
@@ -654,13 +654,13 @@ private:
     Update_u_list();
   }
 
-  arma::uvec init_idx_out() {
+  void init_idx_out() {
     // generate the complete index
     arma::vec idx = arma::linspace(0, u_nrows_ - 1, u_nrows_);
     arma::uvec uidx = arma::conv_to<arma::uvec>::from(idx);
 
     // get the index not included in complete index
-    return std_setdiff(uidx, idx_in_);
+    idx_out_ =  std_setdiff(uidx, idx_in_);
   }
 
   // evaluate remove_one
@@ -702,7 +702,7 @@ private:
   }
 
   void reorder_obs() {
-    idx_out_ = init_idx_out();
+    init_idx_out();
 
     // find one index from idx_in to remove
     // which results in largest val of remove_one()

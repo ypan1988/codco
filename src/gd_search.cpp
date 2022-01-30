@@ -499,8 +499,8 @@ public:
 
               arma::vec val_in_mat(nlist_, arma::fill::zeros);
               for (arma::uword idx = 0; idx < nlist_; ++idx) {
-                val_in_mat(idx) = add_one_helper(get_rm1A(idx), get_u(idx),
-                           inx_in_no_obs, idx, idx_out_(obs_j));
+                val_in_mat(idx) = add_one_helper(get_rm1A(idx),
+                            idx, inx_in_no_obs, idx_out_(obs_j));
               } // for loop
               double val_in = arma::sum(val_in_mat * weights_);
 
@@ -678,11 +678,13 @@ private:
     return val_out_mat * weights_;
   }
 
-  double add_one_helper(const arma::mat &A, const arma::vec &u, const arma::uvec &idx_vec,
-                        arma::uword i, arma::uword ii) {
-    arma::uvec indices = i * sig_nrows_ + idx_vec;
-    return add_one(A, get_sig(i, ii), sig_list_.submat(indices, arma::uvec({ii})),
-            u.elem(join_idx(idx_vec, ii)));
+  double add_one_helper(const arma::mat &A, arma::uword i,
+                        const arma::uvec &idx_vec, arma::uword ii) {
+    arma::uvec sig_ridx = i * sig_nrows_ + idx_vec;
+    arma::uvec u_ridx = i * u_nrows_ + join_idx(idx_vec, ii);
+    return add_one(A, get_sig(i, ii),
+                   sig_list_.submat(sig_ridx, arma::uvec({ii})),
+                   u_list_.rows(u_ridx));
   }
 
   // evaluate add_one
@@ -691,10 +693,8 @@ private:
 #pragma omp parallel for
     for (arma::uword j = 0; j < nlist_; ++j) {
       const arma::mat A = use_rm1A ? get_rm1A(j) : get_A(j);
-      const arma::vec u = get_u(j);
-
       for (arma::uword i = 0; i < idx_out_.n_elem; ++i) {
-        val_in_mat(i,j) = add_one_helper(A, u, idx_in_, j, idx_out_(i));
+        val_in_mat(i,j) = add_one_helper(A, j, idx_in_, idx_out_(i));
       }
     }
 

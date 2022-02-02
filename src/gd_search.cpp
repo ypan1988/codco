@@ -360,6 +360,8 @@ public:
   arma::uvec idx_out_;
   arma::vec new_val_vec_;
   arma::vec best_val_vec_;
+  double val_;
+  double new_val_;
 
   arma::mat A_list_;
   arma::mat A_list_sub_;
@@ -381,7 +383,7 @@ public:
   C_list_(C_list), X_list_(X_list), sig_list_(sig_list), weights_(weights), nlist_(weights_.n_elem),
   C_nrows_(C_list.n_rows / nlist_), X_nrows_(X_list.n_rows / nlist_), sig_nrows_(sig_list.n_rows / nlist_),
   n_(idx_in.n_elem), N_(sig_nrows_), idx_in_(idx_in), idx_out_(N_ - n_, arma::fill::zeros),
-  new_val_vec_(nlist_, arma::fill::zeros), best_val_vec_(nlist_, arma::fill::zeros),
+  new_val_vec_(nlist_, arma::fill::zeros), best_val_vec_(nlist_, arma::fill::zeros), val_(0.0), new_val_(0.0),
   A_list_(n_ * nlist_, n_, arma::fill::zeros), A_list_sub_(n_ * nlist_, n_, arma::fill::zeros),
   rm1A_list_((n_-1) * nlist_, n_-1, arma::fill::zeros),
   M_list_(C_nrows_ * nlist_, C_nrows_, arma::fill::zeros),
@@ -435,8 +437,78 @@ public:
     }
     return arma::dot(new_val_vec_, weights_);
   }
+  double check_all_neighbours(double &diff) {
+    // if reordering doesn't find a better solution then check all the neighbours
+    // check optimality and see if there are any neighbours that improve the solution
+    // I have got it to go through in order of the ordered observations, and then break the loop if
+    // it reaches one with a positive gradient because we know the ones after that will be worse
+
+    if (trace_) Rcpp::Rcout << "Checking optimality..." << std::endl;
+    for (arma::uword obs = 0; obs < n_; ++obs)  {
+      if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
+      Update_rm1A_list(obs);
+
+      arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
+      bool idx_in_updated = false;
+      for (arma::uword obs_j = 0; obs_j < N_ - n_; ++obs_j) {
+        if (idx_in_updated) {
+          inx_in_no_obs = uvec_minus(idx_in_, obs);
+          idx_in_updated = false;
+        }
+        const arma::uvec inx_out_no_obsj = uvec_minus(idx_out_, obs_j);
+
+        arma::vec val_in_mat(nlist_, arma::fill::zeros);
+        for (arma::uword idx = 0; idx < nlist_; ++idx) {
+          val_in_mat(idx) = add_one_helper(get_rm1A(idx),
+                     idx, inx_in_no_obs, idx_out_(obs_j));
+        } // for loop
+        double val_in = arma::sum(val_in_mat * weights_);
+
+        if (val_ - val_in < 0) {
+          Update_A_list_sub(inx_in_no_obs, idx_out_(obs_j));
+          bool flag = Update_M_list(join_idx(inx_in_no_obs, idx_out_(obs_j)), true, 1);
+          if (!flag) continue;
+          new_val_ = comp_c_obj_fun();
+
+          if (new_val_ - val_ < 0) {
+            diff = new_val_ - val_;
+            if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val_ << std::endl;
+            UpdateResult(inx_in_no_obs, inx_out_no_obsj, obs, obs_j);
+            idx_in_updated = true;
+            break;
+          } // if (new_val - val < 0)
+        } else break; // if (val - val_in < 0)
+      } // for loop obs_j
+
+      if (diff < 0) break;
+    } // for loop obs
+    return diff;
+  }
+
+  bool easy_swap(int &i, double &diff, bool reorder = false) {
+    ++i;
+
+    // if no easy swaps can be made, reorder the list and try the top one again
+    if (reorder) reorder_obs();
+
+    Update_rm1A_list(0);
+    Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
+    Update_M_list(join_idx(idx_in_.tail(n_-1), idx_out_(0)), true, 2);
+    new_val_ = comp_c_obj_fun();
+    diff = new_val_ - val_;
+
+    // we are now looking for the smallest value rather than largest so diff < 0
+    std::string str = reorder ? "Iter (reorder)" : "Iter ";
+    if (trace_) Rcpp::Rcout << str << i << ": " << val_ << std::endl;
+
+    bool flag = diff < 0;
+    if (flag) UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
+
+    return flag;
+  }
+
   void grad_robust_step() {
-    double new_val = comp_c_obj_fun();
+    new_val_ = comp_c_obj_fun();
 
     reorder_obs();
 
@@ -444,85 +516,17 @@ public:
     int i = 0;
     // we now need diff to be negative
     while (diff < 0) {
-      double val = new_val;
-      ++i;
+      val_ = new_val_;
       best_val_vec_ = new_val_vec_;
 
-      Update_rm1A_list(0);
-      Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
-      Update_M_list(join_idx(idx_in_.tail(n_-1), idx_out_(0)), true, 2);
-      new_val = comp_c_obj_fun();
-
-      diff = new_val - val;
-
-      if (trace_) Rcpp::Rcout << "Iter " << i << ": " << val << std::endl;
-
-      if (diff < 0) {
-        UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
-      } else {
-        // if no easy swaps can be made, reorder the list and try the top one again
-        ++i;
-
-        reorder_obs();
-
-        Update_rm1A_list(0);
-        Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
-        Update_M_list(join_idx(idx_in_.tail(n_-1), idx_out_(0)), true, 2);
-        new_val = comp_c_obj_fun();
-
-        diff = new_val - val;
-
-        // we are now looking for the smallest value rather than largest so diff<0
-        if (trace_) Rcpp::Rcout << "Iter (reorder)" << i << ": " << val << std::endl;
-
-        if (diff < 0) {
-          UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
-        } else {
-          // if reordering doesn't find a better solution then check all the neighbours
-          // check optimality and see if there are any neighbours that improve the solution
-          // I have got it to go through in order of the ordered observations, and then break the loop if
-          // it reaches one with a positive gradient because we know the ones after that will be worse
-
-          if (trace_) Rcpp::Rcout << "Checking optimality..." << std::endl;
-          for (arma::uword obs = 0; obs < n_; ++obs)  {
-            if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
-            Update_rm1A_list(obs);
-
-            arma::uvec inx_in_no_obs = uvec_minus(idx_in_, obs);
-            bool idx_in_updated = false;
-            for (arma::uword obs_j = 0; obs_j < N_ - n_; ++obs_j) {
-              if (idx_in_updated) {
-                inx_in_no_obs = uvec_minus(idx_in_, obs);
-                idx_in_updated = false;
-              }
-              const arma::uvec inx_out_no_obsj = uvec_minus(idx_out_, obs_j);
-
-              arma::vec val_in_mat(nlist_, arma::fill::zeros);
-              for (arma::uword idx = 0; idx < nlist_; ++idx) {
-                val_in_mat(idx) = add_one_helper(get_rm1A(idx),
-                            idx, inx_in_no_obs, idx_out_(obs_j));
-              } // for loop
-              double val_in = arma::sum(val_in_mat * weights_);
-
-              if (val - val_in < 0) {
-                Update_A_list_sub(inx_in_no_obs, idx_out_(obs_j));
-                bool flag = Update_M_list(join_idx(inx_in_no_obs, idx_out_(obs_j)), true, 1);
-                if (!flag) continue;
-                new_val = comp_c_obj_fun();
-
-                if (new_val - val < 0) {
-                  diff = new_val - val;
-                  if (trace_) Rcpp::Rcout << "\nImprovement found: " << new_val << std::endl;
-                  UpdateResult(inx_in_no_obs, inx_out_no_obsj, obs, obs_j);
-                  idx_in_updated = true;
-                  break;
-                } // if (new_val - val < 0)
-              } else break; // if (val - val_in < 0)
-            } // for loop obs_j
-
-            if (diff < 0) break;
-          } // for loop obs
-        }// else
+      bool diff_l0 = easy_swap(i, diff);
+      if (!diff_l0) {
+        // if no easy swaps can be made, reorder the list
+        // and try the top one again
+        diff_l0 = easy_swap(i, diff, true);
+        // if reordering doesn't find a better solution
+        // then check all the neighbours
+        if (!diff_l0) check_all_neighbours(diff);
       }
     } // while loop
   }

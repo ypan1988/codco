@@ -1,0 +1,101 @@
+---
+title: "GLMM Designs"
+author: "Sam Watson and Yi Pan"
+date: "03/02/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+devtools::load_all()
+```
+
+# Introduction
+This package provides a suite of design analysis tools for any study design that can be represented or modelled as a generalised linear mixed model. These studies include cluster randomised trials, cohort studies, spatial and spatio-temporal epidemiological models, and split-plot designs. The aim of the package is to provide flexible access to various methods like power calculation, either by simulaton or approximation, or identification of optimal designs. 
+
+## Generalised Linear Mixed Models
+### Basic specification
+A generalised linear mixed model has a mean function
+$$
+\mu = X\beta + Z\delta
+$$
+where $X$ is a $n \times p$ matrix of covariates, with each row corresponding to one observation in our study, $\beta$ is a vector of parameters of which one or more provide the estimate of interest for our study, $Z$ is the $n \times q$ "design matrix" that combines the random effects terms $\delta \sim N(0,D)$, where $D$ is the covariance matrix of the random effects terms. The study under consideration will produce observations $Y$ where
+$$
+Y \sim F(h(\mu);\omega)
+$$
+where $F$ is a distribution, $h(.)$ is the link function, and $\omega$ additional parameters to complete the specification. 
+
+### Parameter estimation and study design
+One of the key considerations when designing a study is the amount of information the study will provide about the parameter(s) of interest. For likelihood-based approaches, for example, we can consider the variance of the GLS estimator:
+$$
+\tag{1}
+Var(\hat{\beta}) = (X^T \Sigma^{-1}X)^{-1}
+$$
+where $\Sigma$ is the covariance matrix of the observations:
+$$
+\Sigma = W + ZDZ^T
+$$
+and $W$ is weight matrix. Where $F$ is a Gaussian distribution, $h$ is the identity link, and $\omega = \sigma^2$ then $W = \sigma^2I_n$ and (1) is the variance of the best linear unbiased estimator of $\beta$. For non-linear models, the covariance is approximate and $W$ is a diagonal matrix of GLM iterated weights.
+
+Bayesian approaches may consider the posterior variance:
+$$
+Var(\beta|Y) = (X^T \Sigma^{-1}X + V_0^{-1})^{-1}
+$$
+where $V_0$ is the prior covariance of the model parameters. One design criterion in the Bayesian setting is the average posterior variance $E(Var(\beta|Y))$ where the expectation is taken with respect to the prior distributions of the parameters and hyperparameters.
+
+## The GLMM Design classes
+Figure 1 shows the structure of the class system used to represent a study design. We use the R6 class system to represent four types of object: mean function, covariance, a design, and a design space. Each of these objects takes different inputs and produces and stores different components of the GLMM model. The intention of representing models in this modular fashion is to permit users to change individual components, such as a single parameter or covariance specification, and have all linked components update seamlessly. The reference semantics of the R6 class system mean multiple different designs can point to the same mean function, say, while holding different covariance structures, reducing the memory requirements when comparing lots of different models. Matrices are stored as sparse matrices, which also reduces the memory requirements. R6 is an encapsultated object orientated system so each of these objects `possesses' methods so that a calculation of power or simulation of data is an inherent method of a design that can access all the required matrix and other data components. 
+
+![Structure of model and class](../diagram.png)
+
+The flexible, generalised class structure permits the representation and analysis of any study that can be specified as a GLMM. Researchers looking to conduct, say, a power analysis for a particular study design are typically faced with many different software packages, which are typically specific to a particular type of study design, and which typically offer a limited list of formulae or wrappers implementing prespecfied calls to other functions. For example, consider the design of a stepped-wedge cluster randomised trial. The website xxx lists 
+
+
+
+
+# Specifying a model
+
+## Nelder's Notation
+Nelder (1965) suggested a simple notation that could express a large variety of different blocked designs. The notation was proposed in the context of split-plot experiments for agricultural research, where researchers often split areas of land into blocks, sub-blocks, and other smaller divisions, and apply different combinations of treatments. However, the notation is useful for expressing a large variety of experimental designs with correlation and clustering including cluster trials, cohort studies, and spatial and temporal prevalence surveys. We have included the function `nelder()` that generates a data frame of a design using the notation. 
+
+There are two operations:
+
+* `>` (or $\to$ in Nelder's notation) indicates "clustered in".
+
+* `*` (or $\times$ in Nelder's notation) indicates a crossing that generates all combinations of two factors.
+
+The implementation of this notation includes a string indicating the name of the variable and a number for the number of levels, such as `abc(12)`. So for example `~cl(4) > ind(5)` means in each of five levels of `cl` there are five levels of `ind`, and the individuals are different between clusters. The formula `~cl(4) * t(3)` indicates that each of the four levels of `cl` are observed for each of the three levels of `t`. Brackets are used to indicate the order of evaluation. Some specific examples:
+
+* `~person(5) * time(10)`: A cohort study with five people, all observed in each of ten periods `time`
+
+* `~(cl(4) * t(3)) > ind(5)`: A repeated-measures cluster study with four clusters (labelled `cl`), each observed in each time period `t` with cross-sectional sampling and five indviduals (labelled `ind`) in each cluster-period.
+
+* `~(cl(4) > ind(5)) * t(3)`: A repeated-measures cluster cohort study with four clusters (labelled `cl`) wth five individuals per cluster, and each cluster-individual combination is observed in each time period `t`.
+
+* `~((x(100) * y(100)) > hh(4)) * t(2)`: A spatio-temporal grid of 100x100 and two time points, with 4  households per spatial grid cell.
+
+Use of this function produces a data frame:
+```{r}
+df <- nelder(~(cl(4) * t(3)) > ind(5))
+head(df)
+```
+We will use this data frame for the subsequent examples.
+
+Such an approach to study design assumes the same number of each factor for each other factor, which is not likely adequate for certain study designs. For example, we may expect unequal cluster sizes, staggered inclusion/drop-out, and so forth, and so a user-generate data set would be required. Certain treatment conditions may be specified with this approach including parallel trial designs, stepped-wedge implementation, or factorial approaches by specifying a treatment arm as part of the block structure. However, for other designs, a user-specified column or data set would be required. We also provide several study-specific functions that generate a complete design based on some simple inputs, which are described below.
+
+## Covariance
+The specification of a covariance object requires three inputs: formula, data, and parameters. A new instance of each of the four classes can be generated with the `$new()` function, for example `Covariance$new(...)`. We adapt and extend the random effects specification approach of the R package `lme4` to allow for relatively complex structures through the specification of a covariance function. 
+
+
+## Mean function
+
+
+## Design
+
+## Design space
+
+# Specific study design functions
+
+# Methods
+
+

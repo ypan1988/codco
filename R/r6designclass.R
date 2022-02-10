@@ -204,14 +204,12 @@ Design <- R6::R6Class("Design",
                     },
                     apv = function(prior,
                                    var,
-                                   prior_fun,
+                                   prior.fun,
                                    iter,
                                    verbose=TRUE){
                       if(verbose)message("Monte Carlo integration")
-                      samps <- pbapply::pbreplicate(iter,function(){
-                        pars <- do.call(prior.fun)
-                        return(self$posterior(prior,var,pars))
-                      })
+                      samps <- pbapply::pbreplicate(iter,self$posterior(prior,var,do.call(prior.fun,list())))
+                      summary(samps)
                     },
                     posterior = function(prior,
                                          var,
@@ -220,7 +218,7 @@ Design <- R6::R6Class("Design",
                       #can just request a function that outputs a new set of covariance parameters
                       R <- solve(Matrix::Matrix(diag(prior)))
                       S <- private$genS(self$covariance$sampleD(parameters),self$covariance$Z,private$W,update=FALSE)
-                      M <- R + crossprod(self$mean_function$X,solve(S))%*%self$mean_function$X
+                      M <- R + Matrix::crossprod(self$mean_function$X,solve(S))%*%self$mean_function$X
                       M <- solve(M)
                       M[var,var]
                     }
@@ -284,9 +282,9 @@ Design <- R6::R6Class("Design",
                     },
                     genS = function(D,Z,W,update=TRUE){
                       if(is(D,"numeric")){
-                        S <- W + D * tcrossprod(Z)
+                        S <- W + D * Matrix::tcrossprod(Z)
                       } else {
-                        S <- W + Z %*% tcrossprod(D,Z)
+                        S <- W + Z %*% Matrix::tcrossprod(D,Z)
                       }
                       if(update){
                         self$Sigma <- Matrix::Matrix(S)

@@ -40,8 +40,8 @@ stepped_wedge <- function(J,
   df <- nelder(formula(paste0("~ (J(",J,") > ind(",M,")) * t(",t,")")))
   df <- df[order(df$J,df$t),]
   int <- c()
-  for(i in 1:nJ){
-    int <- c(int,rep(c(rep(0,nT-(i)),rep(1,i)),1))
+  for(i in 1:J){
+    int <- c(int,rep(c(rep(0,t-(i)),rep(1,i)),1))
   }
   df$int <- rep(int,each=M)
 

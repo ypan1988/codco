@@ -1,5 +1,5 @@
 ---
-title: "GLMM Designs"
+title: "glmmr: An R package for design analysis using generalised linear mixed models"
 author: "Sam Watson and Yi Pan"
 date: "03/02/2022"
 output: html_document
@@ -21,9 +21,9 @@ $$
 $$
 where $X$ is a $n \times p$ matrix of covariates, with each row corresponding to one observation in our study, $\beta$ is a vector of parameters of which one or more provide the estimate of interest for our study, $Z$ is the $n \times q$ "design matrix" that combines the random effects terms $\delta \sim N(0,D)$, where $D$ is the covariance matrix of the random effects terms. The study under consideration will produce observations $Y$ where
 $$
-Y \sim F(h(\mu);\omega)
+Y \sim G(h(\mu);\omega)
 $$
-where $F$ is a distribution, $h(.)$ is the link function, and $\omega$ additional parameters to complete the specification. 
+where $G$ is a distribution, $h(.)$ is the link function, and $\omega$ additional parameters to complete the specification. 
 
 ### Parameter estimation and study design
 One of the key considerations when designing a study is the amount of information the study will provide about the parameter(s) of interest. For likelihood-based approaches, for example, we can consider the variance of the GLS estimator:
@@ -48,9 +48,61 @@ Figure 1 shows the structure of the class system used to represent a study desig
 
 ![Structure of model and class](../diagram.png)
 
-The flexible, generalised class structure permits the representation and analysis of any study that can be specified as a GLMM. Researchers looking to conduct, say, a power analysis for a particular study design are typically faced with many different software packages, which are typically specific to a particular type of study design, and which typically offer a limited list of formulae or wrappers implementing prespecfied calls to other functions. For example, consider the design of a stepped-wedge cluster randomised trial. The website xxx lists 
+The flexible, generalised class structure permits the representation and analysis of any study that can be specified as a GLMM. Researchers looking to conduct, say, a power analysis for a particular study design are typically faced with many different software packages, which are typically specific to a particular type of study design, and which typically offer a limited list of formulae or wrappers implementing prespecfied calls to other functions. This approach to providing design analysis tools is limited because as the number of different options for a user increases, the number of different options and specifications becomes very large. For example, consider the design of a stepped-wedge cluster randomised trial. Just using R, there are many different packages providing different and overlapping sets of tools. Tables 1 and 2 list the feaures and models supported by eight packages. Users may have to use different packages for different analyses, and most are limited, so that a user wanting to investigate, for example, more complex covariance structures, who want to take a Bayesian approach, or examine a restricted randomisation method would be out of luck. glmmr's modular structure permits all the features described in Tables 1 and 2 to be offered, and additional functionality added by the user. 
 
+```{r echo=FALSE, results='asis'}
+library(knitr)
+tab1 <- data.frame(
+  Package = c('SWSamp','samplingDataCRT','ShinycRCT','swCRTdesign',
+              'ClusterPower','CRTdistpower','swdpwr','SteppedPower',
+              'glmmr'),
+  "Custom Designs" = c("$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\checkmark$",
+                       "$\\sim^1$","$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\checkmark$"),
+  "Data simulation" = c("$\\checkmark$","$\\checkmark$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  "Power by simulation" = c("$\\checkmark$","$\\times$","$\\times$","$\\times$",
+                    "$\\checkmark$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  "Power by approx." = c("$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\checkmark$",
+                       "$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\checkmark$"),
+   "Non-simple randomisation" = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                    "$\\sim^3$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  "Bayesian methods" = c("$\\checkmark$","$\\times$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  "Optimal designs" = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  check.names = FALSE
 
+    )
+
+tab2 <- data.frame(
+  Package = c('SWSamp','samplingDataCRT','ShinycRCT','swCRTdesign',
+              'ClusterPower','CRTdistpower','swdpwr','SteppedPower',
+              'glmmr'),
+  "Non- canonical link" = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                       "$\\times$","$\\times$","$\\checkmark$","$\\times$","$\\checkmark$"),
+  "Binomial/ Poisson" = c("$\\checkmark$","$\\sim$","$\\checkmark$","$\\checkmark$",
+                       "$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\sim$","$\\checkmark$"),
+  "Other dist." = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  "Compound symmetry" = c("$\\checkmark$","$\\checkmark$","$\\checkmark$","$\\checkmark$",
+                       "$\\checkmark$","$\\sim^2$","$\\checkmark$","$\\checkmark$","$\\checkmark$"),
+  "Temporal decay (exponential/AR(1))" = c("$\\times$","$\\times$","$\\checkmark$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  "Random slopes" = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\checkmark$","$\\checkmark$"),
+  "Covariates" = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\sim^3$","$\\checkmark$"),
+  "Other covariance functions" = c("$\\times$","$\\times$","$\\times$","$\\times$",
+                    "$\\times$","$\\times$","$\\times$","$\\times$","$\\checkmark$"),
+  
+  check.names = FALSE
+
+    )
+kable(tab1,caption="Table 1: Features")
+kable(tab2,caption="Table 2: Supported models")
+```
+
+Another advantage that glmmr offers is the ability to calculate power using simuation methods where the most widely used underlying estimation routines do not allow for complex covariance structures. For example, `lme4` is a widely used package for estimating GLMMs. Its standard formulae only typically allow a user to specify models incorporating compound symmetric covariance functions. However, `lme4` is built in a modular fashion, and provides tools to access the underlying estimation algorithms. `glmmr` exploits this structure to use `lme4`'s routines for any model that can be represented as a design here, including those with complex covariance functions. 
 
 
 # Specifying a model
@@ -76,7 +128,7 @@ The implementation of this notation includes a string indicating the name of the
 
 Use of this function produces a data frame:
 ```{r}
-df <- nelder(~(cl(4) * t(3)) > ind(5))
+df <- nelder(~(j(4) * t(5)) > i(5))
 head(df)
 ```
 We will use this data frame for the subsequent examples.
@@ -84,18 +136,166 @@ We will use this data frame for the subsequent examples.
 Such an approach to study design assumes the same number of each factor for each other factor, which is not likely adequate for certain study designs. For example, we may expect unequal cluster sizes, staggered inclusion/drop-out, and so forth, and so a user-generate data set would be required. Certain treatment conditions may be specified with this approach including parallel trial designs, stepped-wedge implementation, or factorial approaches by specifying a treatment arm as part of the block structure. However, for other designs, a user-specified column or data set would be required. We also provide several study-specific functions that generate a complete design based on some simple inputs, which are described below.
 
 ## Covariance
+### Covariance function specification
 The specification of a covariance object requires three inputs: formula, data, and parameters. A new instance of each of the four classes can be generated with the `$new()` function, for example `Covariance$new(...)`. We adapt and extend the random effects specification approach of the R package `lme4` to allow for relatively complex structures through the specification of a covariance function. 
 
+A covariance function is specified as an additive formula made up of components with structure `(1|f(j))`. The left side of the vertical bar specifies the covariates in the model that have a random effects structure. The right side of the vertical bar specify the covariance function `f` for that term using variable named in the data `j`. If there are multiple covariates on the left side, it is assumed their random effects are correlated, e.g. `(1+x|f(j))`. Additive functions are assumed to be independent, for example, `(1|f(j))+(x|f(j))` would create random effects with zero correlation for the intercept and the parameter on covariate `x`. Covariance functions on the right side of the vertical bar are multiplied together, i.e. `(1|f(j)*g(t))`. There are several common functions included but a user can add additional functions as described below. The included functions are:
+
+```{r echo=FALSE, results='asis'}
+tab3 <- data.frame(
+  "Function"= c("Identity/ Group membership","Exponential","Exponential power"),
+  "$Cov(x_i,x_{i'})$" = c("$\\theta_1 \\mathbf{1}(x_i = x_{i'})$", "$\\theta_1 \\text{exp}(-\\theta_2 \\vert x_i - x_{i'}\\vert )$", 
+                          "$\\theta_1^{ \\vert x_i - x_{i'} \\vert }$"),
+  "Code" = c("`gr(x)`","`fexp(x)`","`pexp(x)`"),
+  check.names=FALSE
+)
+
+kable(tab3,caption="Covariance functions")
+```
+
+One can add other functions by specifying a function that takes a list as an argument with first element called data that contains the data, and a second element called pars that contains the parameters as a vector. For example, the function `fexp` is specified as:
+```{r eval=FALSE}
+fexp <- function(x){
+  x$pars[1]*exp(-x$pars[2]*x$data)
+}
+```
+
+One therefore combines functions to provide the desired covariance function. For example, for our stepped-wedge cluster trial we could consider the standard specification with a random effect for the cluster level, and a separate random effect for the cluster-period, which would be `~(1|gr(j))+(1|gr(j)*gr(t))`. Alternatively, we could consider a cluster-level random effect that decays exponentially over time so that, for persons $i$ in cluster $j$ at time $t$, $Cov(y_{ijt},y_{i'jt}) = \theta_1$, for $i\neq i'$, $Cov(y_{ijt},y_{i'jt'}) = \theta_1 \theta_2^{\vert t-t' \vert}$ for $t \neq t'$, and $Cov(y_{ijt},y_{i'j't}) = 0$ for $j \neq j'$. This function would be specified as `~(1|gr(j)*pexp(t))`.
+
+### Covariance function parameters
+Parameters are provided to the covariance function as a list of lists (of lists). The covariance functions described in Table 3 have different parameters $\theta$, and a value is required to be provided to generate the matrix $D$ and related objects. The elements of the list should be lists corresponding to the additive elements of the covariance function. Each of those lists should have elements that are vectors or scalars providing the values of the parameters for each function in the order they are written. For example,
+
+* Formula: `~(1|gr(j))+(1|gr(j)*gr(t))`; parameters: `list(list(0.05),list(1,0.01))` describes the covariance function for $i\neq i'$
+$$
+Cov(y_{ijt},y_{i'j't'}) = 
+\begin{cases}
+0.05 + 1*0.01 & \text{if } j=j', t=t' \\
+0.05 & \text{if } j=j', t\neq t' \\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+* Formula: `~(1|gr(j)*fexp(t))`; parameters: `list(list(0.05,c(1,0.8)))` describes the covariance function
+$$
+Cov(y_{ijt},y_{i'j't'}) = 
+\begin{cases}
+0.05* 1\text{exp}(-0.8\vert t-t' \vert) & \text{if } j=j' \\
+0 & \text{otherwise}
+\end{cases}
+$$
+
+Where a formula allows for non-zero covariance between random effects, for example `(1+x|gr(j))`, the same parameters are applied to both the random effects for `1` and for `x`. An additional member of the list should be provided that describes the covariance. This is to be updated.
+
+### Call to Covariance
+A new covariance object can then be created as so
+```{r}
+cov <- Covariance$new(formula = ~(1|gr(j)*pexp(t)),
+                       parameters = list(list(0.05,0.8)),
+                       data= df)
+cov
+```
 
 ## Mean function
+Specification of the mean function follows standard model formulae in R. For example for our stepped-wedge cluster trial model, a typical mean model is $E(y_{ijt}|\delta)=\beta_0 + \tau_t + \beta_1 d_{jt} + z_{ijt}\delta$ where $\tau_t$ are fixed effects for each time period. The formula specification for this would be `~ factor(t) + int` where `int` is the name of the variable indicating the treatment. We can add this into our example data frame as
+```{r}
+int <- c()
+for(i in 1:4){
+  int <- c(int,rep(c(rep(0,5-(i)),rep(1,i)),1))
+}
+df$int <- rep(int,each=5)
+```
 
+One can also include non-linear functions of variables in the mean function. These are handled in the analyses by first-order approximation. For example, if there are non-linear functions in the mean function then the approximation to the variance of $\hat{\beta}$ is $(F^T \Sigma^{-1}F)^{-1}$ where $F$ is a $n \times P$ matrix, where $P$ is the number of parameters. The $p$th column of $F$ is $\partial\mu/\partial \beta_p$. Available functions are the same as for the covariance functions described in table 3. The user can add additional functions by specifying a new function that takes as an input a named list with elements data and pars, and outputs a matrix with the linearised components. The function name must begin with `d` and in the formula the `d` is removed. For example, one can specify `~fexp(t) + ...` for the function $\beta_1 \text{exp}(-\beta_2 t)$, which would call:
+```{r eval=FALSE}
+dfexp <- function(x){
+  m <- as.matrix(x$data) %*% matrix(x$pars[2:length(x$pars)],ncol=1)
+  X <- matrix(exp(m),ncol=1)
+  for(i in 1:ncol(x$data)){
+    X <- cbind(X,x$data[,i]*x$pars[i+1]*exp(m))
+  }
+  return(X)
+}
+```
+
+A vector of values of the mean function parameters is required to complete the model specification. These values will be used to generate the matrices $F$, $D$, and so forth, and so will be the values at which the functions are evaluated for methods like power, or for data simulation. A complete specification is thus:
+```{r}
+mf <- MeanFunction$new(formula = ~ factor(t)+ int - 1,
+                       data = df,
+                       parameters = rep(0,6),
+                       family = gaussian())
+mf
+```
+
+Note that `factor` in this function does not drop one level, so removing the intercept is required to prevent a collinearity problem. 
 
 ## Design
+A design is simply a covariance object and a mean function object:
+```{r}
+des <- Design$new(covariance = cov,
+                  mean.function = mf,
+                  var_par = 1)
+des
+```
+For Gaussian models one can also specify the option `var.par` which is the conditional variance $\sigma^2$ at the individual level. The default value is 1.  
+
 
 ## Design space
+A design space can contain any number of designs. The purpose of the design space is to contain possible or plausible designs. For identification of optimal designs, it may just contain a single design object that represents a complete design space, the optimal subset of which is to be identified. Multiple designs with different parameter values or functional forms can be compared for robust optimal designs (see below). Similarly, a comparison of power might be desired across multiple different specifications. To complete the specification of the design space, one can also include weights for each design to use in robust optimisation or averaging (see Methods).
+```{r}
+ds1 <- DesignSpace$new(des)
+ds1
+```
 
-# Specific study design functions
+### Cloning of designs and other object
+R6 objects have the method `clone()`. The default cloning behaviour is to create a new object that is a pointer to the original object, rather than creating a separate object in memory. The benefits of this behaviour are that it saves memory, which is imporant for large designs that may have large covariance matrices with thousands or millions of values. However, because the new object references the original object, any changes to the new object will also change the original object and anything linked to it (like a design). For example,
+```{r}
+des$covariance
+des2 <- des$clone()
+des2$covariance$parameters <- list(list(0.01,0.1))
+des$covariance
+```
+Note that all classes in glmmr have a method, `check()` that checks if any formulae, data, or parameters have been changed, and updates accordingly. This is automatically called when analysis methods are used, so does not generally need to be called on each update.
+
+To create a completely new object in memory when duplicating, one can set the option `deep=TRUE`. For a design space with multiple designs where only, say, the covariance differs between designs, but everything else remains the same, we can mix the cloning behaviour to efficiently use memory.
+```{r}
+des.new <- des$clone()
+cov.new <- cov$clone(deep=TRUE)
+cov.new$parameters <- list(list(0.05,0.8))
+des.new$covariance <- cov.new
+des.new$check()
+ds2 <- DesignSpace$new(des,des.new)
+ds2
+```
+
+
+### Experimental conditions
+TBC
+
+## Specific study design functions
+Because 
+### Parallel cluster trial
+
+### Stepped-wedge cluster trial
+
+### Cohort study
+
+### Spatio-temporal sampling
 
 # Methods
 
+## Data simulation
+
+## Power
+### Power by approximation
+
+
+### Power by simulation
+
+## Bayesian approaches
+### Average posterior variance
+
+## Optimal designs
+
+## Extensions
+### Adaptive sampling
 

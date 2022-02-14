@@ -46,7 +46,7 @@ Covariance <- R6::R6Class("Covariance",
                         },
                         subset = function(index){
                           self$data <- self$data[index,]
-                          self$generate()
+                          self$check()
                         },
                         sampleD = function(parameters){
                           return(private$genD(update = FALSE,

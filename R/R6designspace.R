@@ -57,7 +57,7 @@ DesignSpace <- R6::R6Class("DesignSpace",
                                       verbose=TRUE){
                      if(keep&verbose)message("linked design objects will be overwritten with the new design")
                      #initialise from random starting index
-                     n <- private$designs[[1]]$data$n()
+                     n <- private$designs[[1]]$mean_function$n()
                      idx_in <- sort(sample(1:n,m,replace=FALSE))
                      idx_out <- grad_robust_step(
                        idx_in,
@@ -71,7 +71,7 @@ DesignSpace <- R6::R6Class("DesignSpace",
                      if(keep){
                        for(i in 1:self$n()){
                          private$designs[[i]]$subset_rows(idx_out)
-                         ncol <- 1:length(des1$data$colnames())
+                         ncol <- 1:ncol(private$designs[[i]]$mean_function$X)
                          private$designs[[i]]$subset_cols(ncol[-rm_cols[[i]]])
                        }
                      }
@@ -85,14 +85,14 @@ DesignSpace <- R6::R6Class("DesignSpace",
                    genXlist = function(){
                      X_list <- list()
                      for(i in 1:self$n()){
-                       X_list[[i]] <- private$designs[[i]]$X
+                       X_list[[i]] <- as.matrix(private$designs[[i]]$mean_function$X)
                      }
                      return(X_list)
                    },
                    genSlist = function(){
                      S_list <- list()
                      for(i in 1:self$n()){
-                       S_list[[i]] <- private$designs[[i]]$Sigma
+                       S_list[[i]] <- as.matrix(private$designs[[i]]$Sigma)
                      }
                      return(S_list)
                    }

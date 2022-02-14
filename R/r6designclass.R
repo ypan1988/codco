@@ -58,7 +58,7 @@ Design <- R6::R6Class("Design",
                       cat("\n----------------------------------------\n")
                     },
                     n = function(){
-                      self$data$n()
+                      self$mean_function$n()
                     },
                     generate = function(){
                       # add check for var par with gaussian family
@@ -111,11 +111,11 @@ Design <- R6::R6Class("Design",
                       return(pwr)
                     },
                     subset_rows = function(index){
-                      self$data$subset_rows(index)
+                      self$mean_function$subset_rows(index)
                       self$covariance$subset(index)
                     },
                     subset_cols = function(index){
-                      self$data$subset_cols(index)
+                      self$mean_function$subset_cols(index)
                     },
                     plot = function(x,
                                     y,
@@ -142,11 +142,12 @@ Design <- R6::R6Class("Design",
                                         value=NULL){
                       if(!is.null(par)){
                         if(is.null(value))stop("set parameter value")
-                        orig_par <- self$mean_function$parameters[[1]][par]
-                        self$mean_function$parameters[[1]][par] <- value
+                        orig_par <- self$mean_function$parameters[par]
+                        self$mean_function$parameters[par] <- value
                       }
                       re <- MASS::mvrnorm(n=1,mu=rep(0,nrow(self$covariance$D)),Sigma = self$covariance$D)
-                      mu <- private$Xb + self$covariance$Z%*%re
+                      mu <- c(drop(self$mean_function$.__enclos_env__$private$Xb)) + as.matrix(self$covariance$Z%*%re)
+                   
                       f <- self$mean_function$family
                       if(f[1]=="poisson"){
                         if(f[2]=="log"){
@@ -191,7 +192,7 @@ Design <- R6::R6Class("Design",
                           y <- rgamma(self$n(),shape = 1/(mu*self$var_par),rate = 1/self$var_par)
                         }
                       }
-                      if(!missing(par))self$mean_function$parameters[[1]][par]<-orig_par
+                      if(!missing(par))self$mean_function$parameters[par]<-orig_par
                       if(type=="y")return(y)
                       if(type=="data.frame")return(cbind(y,self$data$data,self$covariance$location))
                     },
@@ -301,14 +302,15 @@ Design <- R6::R6Class("Design",
                     },
                     lme_est = function(par=NULL,
                                        value=NULL){
-                      lambda <- t(matrix(chol(self$covariance$D),nrow=nrow(self$covariance$D)))
-                      lambda <- Matrix::Matrix(lambda)
+                      lambda <- Matrix::t(Matrix::chol(self$covariance$D))#,nrow=nrow(self$covariance$D)))
+                      #lambda <- Matrix::Matrix(lambda)
+                      
                       parInds <- list(covar = c(1,2),
-                                      fixef = c(3:(2+ncol(self$X))))
+                                      fixef = c(3:(2+ncol(self$mean_function$X))))
                       devfunList <- list(Lind = seq_along(lambda@x),
                                          pp = lme4::merPredD$new(
-                                           X = self$X,
-                                           Zt = Matrix(t(self$covariance$Z)),
+                                           X = self$mean_function$X,
+                                           Zt = Matrix::t(self$covariance$Z),
                                            Lambdat = lambda,
                                            Lind = seq_along(lambda@x),
                                            theta = as.double(lambda@x),
@@ -322,26 +324,29 @@ Design <- R6::R6Class("Design",
                                          baseOffset = rep(0, self$n()),
                                          tolPwrss = 1e-6,
                                          maxit = 30,
-                                         GQmat = GHrule(1),
+                                         GQmat = lme4::GHrule(1),
                                          compDev = TRUE,
                                          fac = NULL,
                                          verbose = TRUE,
                                          parInds = parInds)
                       #NEED TO GENERALISE TO ALL COVARIANCES
                       cov2 <- self$covariance$clone(deep=TRUE)
+                      
 
                       updateTheta <- function(pars){
-                        cov2$parameters <- list(pars[1],pars[2])
+                        cov2$parameters <- relist(cov2$parameters,
+                                                  value = pars)[[1]]
+                        #cov2$parameters <- list(list(pars[1],pars[2]))
                         cov2$check(verbose=FALSE)
                         newD <- cov2$D
-                        cholD <- tryCatch(chol(newD),error=function(e)NULL)
+                        cholD <- tryCatch(Matrix::chol(newD),error=function(e)NULL)
                         if(is.null(cholD)){
-                          newD <- as.matrix(Matrix::nearPD(matrix(newD,nrow=nrow(cov2$D))))
-                          cholD <- tryCatch(chol(newD),error=function(e)print("help!"))
+                          newD <- Matrix::nearPD(matrix(newD,nrow=nrow(cov2$D)))
+                          cholD <- tryCatch(Matrix::chol(newD),error=function(e)print("help!"))
                         }
-                        Matrix(t(matrix(cholD,nrow=nrow(cov2$D))))@x
+                        Matrix::t(cholD)@x
                       }
-
+                      
                       # CHANGE FUNCTION OPTS BELOW
                       devfun <- function(pars) {
                         pp$setTheta(as.double(updateTheta(pars[parInds$covar])))
@@ -356,16 +361,19 @@ Design <- R6::R6Class("Design",
                       devfunEnv <- new.env()
                       environment(devfun) <- list2env(devfunList, envir = devfunEnv)
                       environment(devfun)$lp0 <- environment(devfun)$pp$linPred(1)
+                      
+                      n.cov.par <- length(unlist(cov2$parameters))
 
-                      opt <- tryCatch(minqa::bobyqa(par = c(0.1,0.1,rep(0,ncol(self$X))),
+                      opt <- tryCatch(minqa::bobyqa(par = c(rep(0.1,n.cov.par),rep(0,ncol(self$mean_function$X))),
                                            fn = devfun,
-                                           lower = c(1e-5,1e-5,rep(-Inf,ncol(self$X)))),error=function(e)NULL)
+                                           lower = c(rep(1e-5,n.cov.par),rep(-Inf,ncol(self$mean_function$X)))),error=function(e)NULL)
                       if(is.null(opt)){
-                        return(data.frame(b=rep(NA,ncol(self$X)),se=rep(NA,ncol(self$X))))
+                        return(data.frame(b=rep(NA,ncol(self$mean_function$X)),se=rep(NA,ncol(self$mean_function$X))))
                       } else {
-                        cov2$parameters <- list(opt$par[1],opt$par[2])
+                        cov2$parameters <- relist(cov2$parameters,
+                                                  value = opt$par[seq_len(n.cov.par)])[[1]]#list(list(opt$par[1],opt$par[2]))
                         cov2$check(verbose=FALSE)
-                        se <- sqrt(diag(solve(crossprod(self$X,cov2$Z)%*%cov2$D%*%crossprod(cov2$Z,self$X))))
+                        se <- sqrt(diag(solve(Matrix::crossprod(self$mean_function$X,cov2$Z)%*%cov2$D%*%Matrix::crossprod(cov2$Z,self$mean_function$X))))
                         b <- opt$par[parInds$fixef]
 
                         return(data.frame(b,se))
@@ -373,9 +381,26 @@ Design <- R6::R6Class("Design",
 
                     },
                     information_matrix = function(){
-                      crossprod(self$mean_function$X,solve(self$Sigma))%*%self$mean_function$X
+                      Matrix::crossprod(self$mean_function$X,solve(self$Sigma))%*%self$mean_function$X
                     }
                   ))
+
+
+relist <- function(lst,value,p=0){
+  if(is(lst,"list")){
+    for(i in 1:length(lst)){
+      out <- Recall(lst[[i]],value,p=p)
+      lst[[i]] <- out[[1]]
+      p <- out[[2]]
+    }
+  } else {
+    for(i in 1:length(lst)){
+      lst[i] <- value[p+1]
+      p <- p + 1
+    }
+  }
+  return(list(lst,p))
+}
 
 
 

@@ -1,6 +1,6 @@
-Package: codco
+Package: glmmr
 Type: Package
-Title: c-optimal designs for models with correlated observations
+Title: Design tools for generalised linear mixed models in R
 Version: 0.1.0
 Date: 2021-12-16
 Author@R: c(person("Sam", "Watson", email = "S.I.Watson@bham.ac.uk",

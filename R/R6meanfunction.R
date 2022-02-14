@@ -70,10 +70,11 @@ MeanFunction <- R6::R6Class("MeanFunction",
                             }
                           },
                           subset_rows = function(index){
+                            self$X <- self$X[index,]
                             self$data <- self$data[index,]
                           },
                           subset_cols = function(index){
-                            self$data <- self$data[,index]
+                            self$X <- self$X[,index]
                           }
                         ),
                         private = list(

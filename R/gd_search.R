@@ -422,7 +422,7 @@ grad_robust_step <- function(idx_in,
       }
     } else {
       #if no easy swaps can be made, reorder the list and try the top one again
-      i <- i + 1
+      #i <- i + 1
       idx_list <- reorder_obs(idx_in,
                               A_list,
                               sig_list,
@@ -645,7 +645,7 @@ M_fun <- function(C,X,S){
 
 # sourceCpp("gd_search.cpp")
 grad_robust2 <-function(idx_in, C_list, X_list, sig_list, w=NULL, tol=1e-9,
-                        trace = TRUE, rm_cols = NULL){
+                        trace = TRUE, rm_cols = NULL, nfix = 0){
   if(is.null(w))w <- rep(1/length(sig_list),length(sig_list))
   if(sum(w)!=1)w <- w/sum(w)
   if(!is(w,"matrix"))w <- matrix(w,ncol=1)
@@ -712,7 +712,7 @@ grad_robust2 <-function(idx_in, C_list, X_list, sig_list, w=NULL, tol=1e-9,
     u_list[[i]] <- cM %*% t(X_list[[i]])
   }
 
-  out_list <- GradRobustAlg1(idx_in -1, do.call(rbind, C_list), do.call(rbind, X_list), do.call(rbind, sig_list), weights = w)
+  out_list <- GradRobustAlg1(idx_in -1, do.call(rbind, C_list), do.call(rbind, X_list), do.call(rbind, sig_list), weights = w, nfix)
   idx_in <- out_list[["idx_in"]] + 1
   idx_out <- out_list[["idx_out"]] + 1
   best_val_vec <- out_list[["best_val_vec"]]
@@ -780,7 +780,7 @@ grad_robust2 <-function(idx_in, C_list, X_list, sig_list, w=NULL, tol=1e-9,
 }
 
 grad_robust2_step <-function(idx_in, C_list, X_list, sig_list, w=NULL, tol=1e-9,
-                             trace = TRUE, rm_cols = NULL){
+                             trace = TRUE, rm_cols = NULL, nfix = 0){
   if(is.null(w))w <- rep(1/length(sig_list),length(sig_list))
   if(sum(w)!=1)w <- w/sum(w)
   if(!is(w,"matrix"))w <- matrix(w,ncol=1)
@@ -849,7 +849,7 @@ grad_robust2_step <-function(idx_in, C_list, X_list, sig_list, w=NULL, tol=1e-9,
     u_list[[i]] <- t(C_list[[i]]) %*% solve(M_list[[i]]) %*% t(X_list[[i]])
   }
 
-  out_list <- GradRobustStep(idx_in -1, do.call(rbind, C_list), do.call(rbind, X_list), do.call(rbind, sig_list), weights = w)
+  out_list <- GradRobustStep(idx_in -1, do.call(rbind, C_list), do.call(rbind, X_list), do.call(rbind, sig_list), weights = w, nfix)
   idx_in <- out_list[["idx_in"]] + 1
   idx_out <- out_list[["idx_out"]] + 1
   best_val_vec <- out_list[["best_val_vec"]]

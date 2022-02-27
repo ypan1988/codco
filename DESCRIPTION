@@ -1,4 +1,4 @@
-Package: glmmr
+Package: codco
 Type: Package
 Title: Design tools for generalised linear mixed models in R
 Version: 0.1.0

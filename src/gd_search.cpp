@@ -376,10 +376,13 @@ public:
   const arma::uword M_nrows_;
   const arma::uword u_nrows_;
 
+  const arma::uword nfix_;
+
   bool trace_;
 
 public:
-  HillClimbing(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, bool trace=false) :
+  HillClimbing(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights,
+               arma::uword nfix = 0, bool trace=false) :
   C_list_(C_list), X_list_(X_list), sig_list_(sig_list), weights_(weights), nlist_(weights_.n_elem),
   C_nrows_(C_list.n_rows / nlist_), X_nrows_(X_list.n_rows / nlist_), sig_nrows_(sig_list.n_rows / nlist_),
   n_(idx_in.n_elem), N_(sig_nrows_), idx_in_(idx_in), idx_out_(N_ - n_, arma::fill::zeros),
@@ -388,7 +391,8 @@ public:
   rm1A_list_((n_-1) * nlist_, n_-1, arma::fill::zeros),
   M_list_(C_nrows_ * nlist_, C_nrows_, arma::fill::zeros),
   u_list_(X_nrows_ * nlist_, arma::fill::zeros),
-  A_nrows_(n_), rm1A_nrows_(n_-1), M_nrows_(C_nrows_), u_nrows_(X_nrows_), trace_(trace) {
+  A_nrows_(n_), rm1A_nrows_(n_-1), M_nrows_(C_nrows_), u_nrows_(X_nrows_),
+  nfix_(nfix), trace_(trace) {
     Update_A_list();
     Update_M_list();
     Update_u_list();
@@ -444,7 +448,7 @@ public:
     // it reaches one with a positive gradient because we know the ones after that will be worse
 
     if (trace_) Rcpp::Rcout << "Checking optimality..." << std::endl;
-    for (arma::uword obs = 0; obs < n_; ++obs)  {
+    for (arma::uword obs = nfix_; obs < n_; ++obs)  {
       if (trace_) Rcpp::Rcout << "\rChecking neighbour block: " << obs+1 << " of " << n_;
       Update_rm1A_list(obs);
 
@@ -486,14 +490,22 @@ public:
   }
 
   bool easy_swap(int &i, double &diff, bool reorder = false) {
-    ++i;
+    //++i;
 
     // if no easy swaps can be made, reorder the list and try the top one again
     if (reorder) reorder_obs();
 
+    /*
     Update_rm1A_list(0);
     Update_A_list_sub(idx_in_.tail(n_-1), idx_out_(0));
     Update_M_list(join_idx(idx_in_.tail(n_-1), idx_out_(0)), true, 2);
+    new_val_ = comp_c_obj_fun();
+    diff = new_val_ - val_;
+    */
+    arma::uvec idx_in_m1 = uvec_minus(idx_in_, nfix_);
+    Update_rm1A_list(nfix_);
+    Update_A_list_sub(idx_in_m1, idx_out_(0));
+    Update_M_list(join_idx(idx_in_m1, idx_out_(0)), true, 2);
     new_val_ = comp_c_obj_fun();
     diff = new_val_ - val_;
 
@@ -502,7 +514,8 @@ public:
     if (trace_) Rcpp::Rcout << str << i << ": " << val_ << std::endl;
 
     bool flag = diff < 0;
-    if (flag) UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
+    //if (flag) UpdateResult(idx_in_.rows(1, n_-1), idx_out_.rows(1, n_-1));
+    if (flag) UpdateResult(idx_in_m1, idx_out_.rows(1, n_-1));
 
     return flag;
   }
@@ -510,16 +523,24 @@ public:
   void grad_robust_step() {
     new_val_ = comp_c_obj_fun();
 
+    idx_in_.head(20).t().print("DEBUG1: ");
+
     reorder_obs();
+
+    idx_in_.head(20).t().print("DEBUG2: ");
 
     double diff = -1.0;
     int i = 0;
     // we now need diff to be negative
     while (diff < 0) {
+      ++i;
+
       val_ = new_val_;
       best_val_vec_ = new_val_vec_;
 
       bool diff_l0 = easy_swap(i, diff);
+      idx_in_.head(20).t().print("DEBUG3: ");
+
       if (!diff_l0) {
         // if no easy swaps can be made, reorder the list
         // and try the top one again
@@ -529,6 +550,7 @@ public:
         if (!diff_l0) check_all_neighbours(diff);
       }
     } // while loop
+    idx_in_.head(20).t().print("DEBUG4: ");
   }
 
   double choose_swap_robust(arma::uvec &idx_in_tmp) {
@@ -538,7 +560,8 @@ public:
     // find one index from idx_in to remove
     // which results in largest val of remove_one()
     const arma::vec val_out_vec = comp_val_out_vec();
-    int idx_rm = val_out_vec.index_max();
+    int idx_rm = nfix_ + val_out_vec.tail(n_ - nfix_).index_max();
+    //int idx_rm = val_out_vec.index_max();
 
     // compute the new A without the index of idx_rm
     Update_rm1A_list(idx_rm);
@@ -562,7 +585,7 @@ public:
   }
 
   void grad_robust_alg1() {
-    double new_val = comp_c_obj_fun();
+    new_val_ = comp_c_obj_fun();
 
     double diff = -1.0;
     int i = 0;
@@ -570,17 +593,17 @@ public:
     while (diff < 0) {
       ++i;
 
-      double val = new_val;
+      val_ = new_val_;
       arma::uvec out2;
-      new_val = choose_swap_robust(out2);
+      new_val_ = choose_swap_robust(out2);
 
       //we have to now recalculate all the lists of matrices for the new design proposed by the swap
       A_list_ = A_list_sub_;
       Update_M_list(out2, false, 2);
       Update_u_list();
-      new_val = comp_c_obj_fun();
+      new_val_ = comp_c_obj_fun();
 
-      diff = new_val - val;
+      diff = new_val_ - val_;
       // we are now looking for the smallest value rather than largest so diff<0
       if (diff < 0) idx_in_ = out2;
       if (trace_) Rcpp::Rcout << "\rIter " << i << ": " << diff << std::endl;
@@ -711,7 +734,15 @@ private:
     // find one index from idx_in to remove
     // which results in largest val of remove_one()
     arma::vec val_out_vec = comp_val_out_vec();
-    arma::uvec indices1 = arma::sort_index(val_out_vec, "descend");
+    arma::uvec indices1 = arma::zeros<uvec>(n_);
+    if (nfix_ != 0) {
+	for (arma::uword i = 0; i < nfix_; ++i) { indices1[i] = i; }
+	indices1.tail(n_ - nfix_) = nfix_ + arma::sort_index(val_out_vec.tail(n_ - nfix_), "descend");
+    } else {
+	indices1 = arma::sort_index(val_out_vec, "descend");
+    }
+
+    // arma::uvec indices1 = arma::sort_index(val_out_vec, "descend");
     idx_in_ = idx_in_.rows(indices1);
 
     for (arma::uword j = 0; j < nlist_; ++j) {
@@ -728,8 +759,8 @@ private:
 };
 
 // [[Rcpp::export]]
-Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights) {
-  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, true);
+Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix = 0) {
+  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, nfix, true);
   hc.grad_robust_step();
   return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
                             Named("idx_out") = hc.idx_out_,
@@ -737,8 +768,8 @@ Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list,
 }
 
 // [[Rcpp::export]]
-Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights) {
-  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, true);
+Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix = 0) {
+  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, nfix, true);
   hc.grad_robust_alg1();
   return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
                             Named("idx_out") = hc.idx_out_,

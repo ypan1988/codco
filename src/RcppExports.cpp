@@ -196,8 +196,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // GradRobustStep
-Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights);
-RcppExport SEXP _codco_GradRobustStep(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP) {
+Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix);
+RcppExport SEXP _codco_GradRobustStep(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP, SEXP nfixSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -206,13 +206,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat >::type X_list(X_listSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type sig_list(sig_listSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
-    rcpp_result_gen = Rcpp::wrap(GradRobustStep(idx_in, C_list, X_list, sig_list, weights));
+    Rcpp::traits::input_parameter< arma::uword >::type nfix(nfixSEXP);
+    rcpp_result_gen = Rcpp::wrap(GradRobustStep(idx_in, C_list, X_list, sig_list, weights, nfix));
     return rcpp_result_gen;
 END_RCPP
 }
 // GradRobustAlg1
-Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights);
-RcppExport SEXP _codco_GradRobustAlg1(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP) {
+Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix);
+RcppExport SEXP _codco_GradRobustAlg1(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP, SEXP nfixSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -221,50 +222,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat >::type X_list(X_listSEXP);
     Rcpp::traits::input_parameter< arma::mat >::type sig_list(sig_listSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
-    rcpp_result_gen = Rcpp::wrap(GradRobustAlg1(idx_in, C_list, X_list, sig_list, weights));
-    return rcpp_result_gen;
-END_RCPP
-}
-// rcpparma_hello_world
-arma::mat rcpparma_hello_world();
-RcppExport SEXP _codco_rcpparma_hello_world() {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    rcpp_result_gen = Rcpp::wrap(rcpparma_hello_world());
-    return rcpp_result_gen;
-END_RCPP
-}
-// rcpparma_outerproduct
-arma::mat rcpparma_outerproduct(const arma::colvec& x);
-RcppExport SEXP _codco_rcpparma_outerproduct(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::colvec& >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(rcpparma_outerproduct(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// rcpparma_innerproduct
-double rcpparma_innerproduct(const arma::colvec& x);
-RcppExport SEXP _codco_rcpparma_innerproduct(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::colvec& >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(rcpparma_innerproduct(x));
-    return rcpp_result_gen;
-END_RCPP
-}
-// rcpparma_bothproducts
-Rcpp::List rcpparma_bothproducts(const arma::colvec& x);
-RcppExport SEXP _codco_rcpparma_bothproducts(SEXP xSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< const arma::colvec& >::type x(xSEXP);
-    rcpp_result_gen = Rcpp::wrap(rcpparma_bothproducts(x));
+    Rcpp::traits::input_parameter< arma::uword >::type nfix(nfixSEXP);
+    rcpp_result_gen = Rcpp::wrap(GradRobustAlg1(idx_in, C_list, X_list, sig_list, weights, nfix));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -283,12 +242,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_codco_ChooseSwapRobust", (DL_FUNC) &_codco_ChooseSwapRobust, 8},
     {"_codco_GradRobust", (DL_FUNC) &_codco_GradRobust, 11},
     {"_codco_uvec_minus", (DL_FUNC) &_codco_uvec_minus, 2},
-    {"_codco_GradRobustStep", (DL_FUNC) &_codco_GradRobustStep, 5},
-    {"_codco_GradRobustAlg1", (DL_FUNC) &_codco_GradRobustAlg1, 5},
-    {"_codco_rcpparma_hello_world", (DL_FUNC) &_codco_rcpparma_hello_world, 0},
-    {"_codco_rcpparma_outerproduct", (DL_FUNC) &_codco_rcpparma_outerproduct, 1},
-    {"_codco_rcpparma_innerproduct", (DL_FUNC) &_codco_rcpparma_innerproduct, 1},
-    {"_codco_rcpparma_bothproducts", (DL_FUNC) &_codco_rcpparma_bothproducts, 1},
+    {"_codco_GradRobustStep", (DL_FUNC) &_codco_GradRobustStep, 6},
+    {"_codco_GradRobustAlg1", (DL_FUNC) &_codco_GradRobustAlg1, 6},
     {NULL, NULL, 0}
 };
 

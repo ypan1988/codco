@@ -53,27 +53,11 @@ uvec_minus <- function(v, rm_idx) {
     .Call(`_codco_uvec_minus`, v, rm_idx)
 }
 
-GradRobustStep <- function(idx_in, C_list, X_list, sig_list, weights) {
-    .Call(`_codco_GradRobustStep`, idx_in, C_list, X_list, sig_list, weights)
+GradRobustStep <- function(idx_in, C_list, X_list, sig_list, weights, nfix = 0L) {
+    .Call(`_codco_GradRobustStep`, idx_in, C_list, X_list, sig_list, weights, nfix)
 }
 
-GradRobustAlg1 <- function(idx_in, C_list, X_list, sig_list, weights) {
-    .Call(`_codco_GradRobustAlg1`, idx_in, C_list, X_list, sig_list, weights)
-}
-
-rcpparma_hello_world <- function() {
-    .Call(`_codco_rcpparma_hello_world`)
-}
-
-rcpparma_outerproduct <- function(x) {
-    .Call(`_codco_rcpparma_outerproduct`, x)
-}
-
-rcpparma_innerproduct <- function(x) {
-    .Call(`_codco_rcpparma_innerproduct`, x)
-}
-
-rcpparma_bothproducts <- function(x) {
-    .Call(`_codco_rcpparma_bothproducts`, x)
+GradRobustAlg1 <- function(idx_in, C_list, X_list, sig_list, weights, nfix = 0L) {
+    .Call(`_codco_GradRobustAlg1`, idx_in, C_list, X_list, sig_list, weights, nfix)
 }
 

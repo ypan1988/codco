@@ -377,12 +377,13 @@ public:
   const arma::uword u_nrows_;
 
   const arma::uword nfix_;
+  const arma::uword rd_mode_; // robust designs mode: 1 == weighted, 2 == minimax.
 
   bool trace_;
 
 public:
   HillClimbing(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights,
-               arma::uword nfix = 0, bool trace=false) :
+               arma::uword nfix = 0, arma::uword rd_mode = 0, bool trace=false) :
   C_list_(C_list), X_list_(X_list), sig_list_(sig_list), weights_(weights), nlist_(weights_.n_elem),
   C_nrows_(C_list.n_rows / nlist_), X_nrows_(X_list.n_rows / nlist_), sig_nrows_(sig_list.n_rows / nlist_),
   n_(idx_in.n_elem), N_(sig_nrows_), idx_in_(idx_in), idx_out_(N_ - n_, arma::fill::zeros),
@@ -392,10 +393,11 @@ public:
   M_list_(C_nrows_ * nlist_, C_nrows_, arma::fill::zeros),
   u_list_(X_nrows_ * nlist_, arma::fill::zeros),
   A_nrows_(n_), rm1A_nrows_(n_-1), M_nrows_(C_nrows_), u_nrows_(X_nrows_),
-  nfix_(nfix), trace_(trace) {
+  nfix_(nfix), rd_mode_(rd_mode), trace_(trace) {
     Update_A_list();
     Update_M_list();
     Update_u_list();
+    cout << "rd_mode = " << rd_mode_ << endl;
   }
 
   arma::vec get_C(arma::uword i) const {
@@ -439,7 +441,7 @@ public:
     for (arma::uword j = 0; j < nlist_; ++j) {
       new_val_vec_(j) = c_obj_fun(get_M(j), get_C(j));
     }
-    return arma::dot(new_val_vec_, weights_);
+    return rd_mode_ == 1 ? arma::dot(new_val_vec_, weights_) : new_val_vec_.max();
   }
   double check_all_neighbours(double &diff) {
     // if reordering doesn't find a better solution then check all the neighbours
@@ -466,7 +468,7 @@ public:
           val_in_mat(idx) = add_one_helper(get_rm1A(idx),
                      idx, inx_in_no_obs, idx_out_(obs_j));
         } // for loop
-        double val_in = arma::sum(val_in_mat * weights_);
+        double val_in = rd_mode_==1 ? arma::sum(val_in_mat * weights_) : val_in_mat.max();
 
         if (val_ - val_in < 0) {
           Update_A_list_sub(inx_in_no_obs, idx_out_(obs_j));
@@ -702,7 +704,7 @@ private:
       }
     }
 
-    return val_out_mat * weights_;
+    return rd_mode_==1 ? val_out_mat * weights_ : arma::vec(arma::max(val_out_mat, 1));
   }
 
   double add_one_helper(const arma::mat &A, arma::uword i,
@@ -725,7 +727,7 @@ private:
       }
     }
 
-    return val_in_mat * weights_;
+    return rd_mode_==1 ? val_in_mat * weights_ : arma::vec(arma::max(val_in_mat, 1));
   }
 
   void reorder_obs() {
@@ -759,8 +761,9 @@ private:
 };
 
 // [[Rcpp::export]]
-Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix = 0) {
-  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, nfix, true);
+Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights,
+			  arma::uword nfix = 0, arma::uword rd_mode = 1) {
+  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, nfix, rd_mode, true);
   hc.grad_robust_step();
   return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
                             Named("idx_out") = hc.idx_out_,
@@ -768,8 +771,9 @@ Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list,
 }
 
 // [[Rcpp::export]]
-Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix = 0) {
-  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, nfix, true);
+Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights,
+			  arma::uword nfix = 0, arma::uword rd_mode = 1) {
+  HillClimbing hc(idx_in, C_list, X_list, sig_list, weights, nfix, rd_mode, true);
   hc.grad_robust_alg1();
   return Rcpp::List::create(Named("idx_in") = hc.idx_in_,
                             Named("idx_out") = hc.idx_out_,

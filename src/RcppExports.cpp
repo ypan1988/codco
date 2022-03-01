@@ -196,8 +196,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // GradRobustStep
-Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix);
-RcppExport SEXP _codco_GradRobustStep(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP, SEXP nfixSEXP) {
+Rcpp::List GradRobustStep(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix, arma::uword rd_mode);
+RcppExport SEXP _codco_GradRobustStep(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP, SEXP nfixSEXP, SEXP rd_modeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -207,13 +207,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat >::type sig_list(sig_listSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
     Rcpp::traits::input_parameter< arma::uword >::type nfix(nfixSEXP);
-    rcpp_result_gen = Rcpp::wrap(GradRobustStep(idx_in, C_list, X_list, sig_list, weights, nfix));
+    Rcpp::traits::input_parameter< arma::uword >::type rd_mode(rd_modeSEXP);
+    rcpp_result_gen = Rcpp::wrap(GradRobustStep(idx_in, C_list, X_list, sig_list, weights, nfix, rd_mode));
     return rcpp_result_gen;
 END_RCPP
 }
 // GradRobustAlg1
-Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix);
-RcppExport SEXP _codco_GradRobustAlg1(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP, SEXP nfixSEXP) {
+Rcpp::List GradRobustAlg1(arma::uvec idx_in, arma::vec C_list, arma::mat X_list, arma::mat sig_list, arma::vec weights, arma::uword nfix, arma::uword rd_mode);
+RcppExport SEXP _codco_GradRobustAlg1(SEXP idx_inSEXP, SEXP C_listSEXP, SEXP X_listSEXP, SEXP sig_listSEXP, SEXP weightsSEXP, SEXP nfixSEXP, SEXP rd_modeSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -223,7 +224,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< arma::mat >::type sig_list(sig_listSEXP);
     Rcpp::traits::input_parameter< arma::vec >::type weights(weightsSEXP);
     Rcpp::traits::input_parameter< arma::uword >::type nfix(nfixSEXP);
-    rcpp_result_gen = Rcpp::wrap(GradRobustAlg1(idx_in, C_list, X_list, sig_list, weights, nfix));
+    Rcpp::traits::input_parameter< arma::uword >::type rd_mode(rd_modeSEXP);
+    rcpp_result_gen = Rcpp::wrap(GradRobustAlg1(idx_in, C_list, X_list, sig_list, weights, nfix, rd_mode));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -242,8 +244,8 @@ static const R_CallMethodDef CallEntries[] = {
     {"_codco_ChooseSwapRobust", (DL_FUNC) &_codco_ChooseSwapRobust, 8},
     {"_codco_GradRobust", (DL_FUNC) &_codco_GradRobust, 11},
     {"_codco_uvec_minus", (DL_FUNC) &_codco_uvec_minus, 2},
-    {"_codco_GradRobustStep", (DL_FUNC) &_codco_GradRobustStep, 6},
-    {"_codco_GradRobustAlg1", (DL_FUNC) &_codco_GradRobustAlg1, 6},
+    {"_codco_GradRobustStep", (DL_FUNC) &_codco_GradRobustStep, 7},
+    {"_codco_GradRobustAlg1", (DL_FUNC) &_codco_GradRobustAlg1, 7},
     {NULL, NULL, 0}
 };
 

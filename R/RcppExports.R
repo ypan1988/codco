@@ -53,11 +53,11 @@ uvec_minus <- function(v, rm_idx) {
     .Call(`_codco_uvec_minus`, v, rm_idx)
 }
 
-GradRobustStep <- function(idx_in, C_list, X_list, sig_list, weights, nfix = 0L) {
-    .Call(`_codco_GradRobustStep`, idx_in, C_list, X_list, sig_list, weights, nfix)
+GradRobustStep <- function(idx_in, C_list, X_list, sig_list, weights, nfix = 0L, rd_mode = 1L) {
+    .Call(`_codco_GradRobustStep`, idx_in, C_list, X_list, sig_list, weights, nfix, rd_mode)
 }
 
-GradRobustAlg1 <- function(idx_in, C_list, X_list, sig_list, weights, nfix = 0L) {
-    .Call(`_codco_GradRobustAlg1`, idx_in, C_list, X_list, sig_list, weights, nfix)
+GradRobustAlg1 <- function(idx_in, C_list, X_list, sig_list, weights, nfix = 0L, rd_mode = 1L) {
+    .Call(`_codco_GradRobustAlg1`, idx_in, C_list, X_list, sig_list, weights, nfix, rd_mode)
 }
 
